@@ -169,13 +169,20 @@ export class SemanticAnalyzer {
       );
     }
 
+    const previousScope = this.currentScope;
+    const consequentScope = this.currentScope.createChildScope('block:if_consequent', 'block');
+    this.currentScope = consequentScope;
     this.analyzeBlockStatement(stmt.consequent);
+    this.currentScope = previousScope;
 
     if (stmt.alternate) {
       if (stmt.alternate.type === 'IfStatement') {
         this.analyzeIfStatement(stmt.alternate);
       } else {
+        const altScope = this.currentScope.createChildScope('block:if_alternate', 'block');
+        this.currentScope = altScope;
         this.analyzeBlockStatement(stmt.alternate);
+        this.currentScope = previousScope;
       }
     }
   }
@@ -193,7 +200,11 @@ export class SemanticAnalyzer {
       );
     }
 
+    const previousScope = this.currentScope;
+    const loopScope = this.currentScope.createChildScope('loop:while', 'loop');
+    this.currentScope = loopScope;
     this.analyzeBlockStatement(stmt.body);
+    this.currentScope = previousScope;
   }
 
   private analyzeFunctionDeclaration(stmt: FunctionDeclaration): void {

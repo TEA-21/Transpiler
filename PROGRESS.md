@@ -1,7 +1,7 @@
 # Transpiler Project Progress Tracking
 
 ## Current Active Phase
-- **Phase 2: Semantic Analysis, Type Inference & Grammar Expansion (Review 2 Alignment)**
+- **Review 1 Evaluation Demonstration & Verification (`review-1-demo` branch)**
 
 ## Completed Steps & Exact Techniques/Libraries Used
 
@@ -24,6 +24,7 @@
      - Differentiates `global`, `function`, `block`, and `loop` scopes.
      - Supports lexical chain traversal up ancestor scopes.
      - Tracks mutability (`isMutable`) and prevents undeclared identifier access via [`SemanticError`](file:///d:/Projects/Transpiler/src/errors/diagnostic.ts#L40).
+     - Added tree-wide hierarchical scope serialization via [`toDumpObject`](file:///d:/Projects/Transpiler/src/semantics/symbolTable.ts#L71).
 
 4. **Local Type Inference, Constraint Propagation & Semantic Analyzer (Steps 3.2 & 3.4):**
    - Implemented [`SemanticAnalyzer`](file:///d:/Projects/Transpiler/src/semantics/analyzer.ts#L52) in [`src/semantics/analyzer.ts`](file:///d:/Projects/Transpiler/src/semantics/analyzer.ts):
@@ -39,28 +40,31 @@
      - **AST Node Type Decoration:** Injects inferred type metadata directly onto AST nodes (`inferredType`, `inferredReturnType`, `inferredParamTypes`, `inferredElementType`).
    - Exposed unified semantic entry point via [`analyzeMiniPython`](file:///d:/Projects/Transpiler/src/index.ts#L17) in [`src/index.ts`](file:///d:/Projects/Transpiler/src/index.ts).
 
-5. **Test Verification & Quality Assurance:**
-   - Expanded unit tests to **52 tests across 3 suites**:
+5. **Review 1 Evaluation Demonstration Pipeline:**
+   - Isolated and activated Git branch **`review-1-demo`**.
+   - Placed test program [`demo.py`](file:///d:/Projects/Transpiler/demo.py) showcasing primitive bindings, bidirectional function inference, array indexing inside while loops, and conditional branching.
+   - Built runner [`src/demo.ts`](file:///d:/Projects/Transpiler/src/demo.ts) printing formatted inspect outputs across 4 distinct compiler phases:
+     1. **Lexical Analysis:** Token stream with highlighted virtual `INDENT` and `DEDENT` tokens.
+     2. **AST Generation:** Raw untyped recursive descent AST.
+     3. **Type Inference:** Decorated AST showcasing `inferredType`, `inferredReturnType`, `inferredParamTypes`.
+     4. **Symbol Table:** Full hierarchical dump of scope chains (`global`, `function`, `loop`, `block`).
+   - Configured `"demo": "npx tsx src/demo.ts"` script in [`package.json`](file:///d:/Projects/Transpiler/package.json).
+
+6. **Test Verification & Quality Assurance:**
+   - 52 passing unit tests across 3 suites (`52/52`):
      - [`tests/lexer.test.ts`](file:///d:/Projects/Transpiler/tests/lexer.test.ts): 10 tests passing.
      - [`tests/parser.test.ts`](file:///d:/Projects/Transpiler/tests/parser.test.ts): 15 tests passing.
      - [`tests/semantics.test.ts`](file:///d:/Projects/Transpiler/tests/semantics.test.ts): 27 tests passing.
-   - 100% pass rate (`52/52`).
    - Clean compilation under strict TypeScript (`tsc --noEmit` and `npm run build` exit code 0).
+   - `npm run demo` executed cleanly with 0 errors.
 
 ## Files Created or Modified
-- [`src/errors/diagnostic.ts`](file:///d:/Projects/Transpiler/src/errors/diagnostic.ts) (Added [`SemanticError`](file:///d:/Projects/Transpiler/src/errors/diagnostic.ts#L40) and [`TypeError`](file:///d:/Projects/Transpiler/src/errors/diagnostic.ts#L46))
-- [`src/lexer/tokens.ts`](file:///d:/Projects/Transpiler/src/lexer/tokens.ts) (Added `LBRACKET` and `RBRACKET`)
-- [`src/lexer/lexer.ts`](file:///d:/Projects/Transpiler/src/lexer/lexer.ts) (Added bracket depth handling and token emission)
-- [`src/parser/ast.ts`](file:///d:/Projects/Transpiler/src/parser/ast.ts) (Added `WhileStatement`, `FunctionDeclaration`, `ReturnStatement`, `ArrayLiteral`, `IndexExpression`)
-- [`src/parser/parser.ts`](file:///d:/Projects/Transpiler/src/parser/parser.ts) (Added parsing for while loops, functions, returns, arrays, and indexing)
-- [`src/semantics/types.ts`](file:///d:/Projects/Transpiler/src/semantics/types.ts) (Defined type system and algebraic type representation)
-- [`src/semantics/symbolTable.ts`](file:///d:/Projects/Transpiler/src/semantics/symbolTable.ts) (Implemented lexical Scope and Symbol Table)
-- [`src/semantics/unifier.ts`](file:///d:/Projects/Transpiler/src/semantics/unifier.ts) (Implemented Robinson unification engine)
-- [`src/semantics/analyzer.ts`](file:///d:/Projects/Transpiler/src/semantics/analyzer.ts) (Implemented SemanticAnalyzer and constraint propagation)
-- [`src/semantics/index.ts`](file:///d:/Projects/Transpiler/src/semantics/index.ts) (Exported semantic subsystem)
-- [`src/index.ts`](file:///d:/Projects/Transpiler/src/index.ts) (Exposed `analyzeMiniPython`)
-- [`tests/parser.test.ts`](file:///d:/Projects/Transpiler/tests/parser.test.ts) (Added parser tests for while, functions, and arrays)
-- [`tests/semantics.test.ts`](file:///d:/Projects/Transpiler/tests/semantics.test.ts) (Comprehensive suite for type inference, symbol table, and constraints)
+- [`demo.py`](file:///d:/Projects/Transpiler/demo.py)
+- [`src/demo.ts`](file:///d:/Projects/Transpiler/src/demo.ts)
+- [`package.json`](file:///d:/Projects/Transpiler/package.json)
+- [`tsconfig.json`](file:///d:/Projects/Transpiler/tsconfig.json)
+- [`src/semantics/symbolTable.ts`](file:///d:/Projects/Transpiler/src/semantics/symbolTable.ts)
+- [`src/semantics/analyzer.ts`](file:///d:/Projects/Transpiler/src/semantics/analyzer.ts)
 - [`PROGRESS.md`](file:///d:/Projects/Transpiler/PROGRESS.md)
 
 ## Next Immediate Action
