@@ -1,0 +1,20 @@
+{
+  "name": "mini-python-transpiler",
+  "version": "1.0.0",
+  "description": "Mini-Python to Strict TypeScript Transpiler",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": ["transpiler", "compiler", "python", "typescript"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
