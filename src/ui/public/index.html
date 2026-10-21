@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini-Python Transpiler Workbench</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="workbench">
+    <!-- Top Control Bar -->
+    <header class="topbar">
+      <div class="brand-section">
+        <div class="brand-icon">λ</div>
+        <div class="brand-title">
+          <span class="brand-name">Mini-Python Transpiler</span>
+          <span class="badge-milestone">Review 2 Workbench</span>
+        </div>
+      </div>
+
+      <div class="controls-section">
+        <div class="preset-wrapper">
+          <label for="preset-select" class="control-label">Preset:</label>
+          <select id="preset-select" class="dropdown">
+            <option value="review2">Review 2 Demo Pipeline (Full)</option>
+            <option value="bidirectional">Bidirectional Function Inference</option>
+            <option value="arrays_loops">While Loops & Homogeneous Arrays</option>
+            <option value="error_reassign">[Negative] Conflicting Reassignment</option>
+            <option value="error_arithmetic">[Negative] Illegal String Arithmetic</option>
+            <option value="error_guard">[Negative] Non-Boolean Guard Expression</option>
+          </select>
+        </div>
+
+        <div class="toggle-wrapper">
+          <label class="switch" title="Auto-transpile as you type">
+            <input type="checkbox" id="live-toggle" checked>
+            <span class="slider"></span>
+          </label>
+          <span class="toggle-label">Live Transpile</span>
+        </div>
+
+        <button id="transpile-btn" class="btn btn-primary" title="Execute Transpile (Ctrl+Enter)">
+          <span class="btn-icon">⚡</span>
+          <span class="btn-text">Transpile</span>
+          <kbd class="shortcut-kbd">Ctrl+↵</kbd>
+        </button>
+      </div>
+    </header>
+
+    <!-- Status Bar / Metric Strip -->
+    <div class="status-strip">
+      <div class="status-left">
+        <span id="status-indicator" class="status-pill status-ready">Ready</span>
+        <span id="metric-latency" class="metric-item">Latency: --</span>
+        <span id="metric-tokens" class="metric-item">Tokens: --</span>
+        <span id="metric-indents" class="metric-item">Indents: --</span>
+        <span id="metric-ast" class="metric-item">AST Statements: --</span>
+      </div>
+      <div class="status-right">
+        <span class="info-tag">Target: Strict TypeScript (No any)</span>
+      </div>
+    </div>
+
+    <!-- Main Split Editor Workspace -->
+    <main class="editor-workspace">
+      <!-- Left Panel: Mini-Python Input -->
+      <section class="panel panel-left">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="lang-tag lang-py">Python</span>
+            <span>Input Source</span>
+          </div>
+          <div class="panel-actions">
+            <span id="py-line-count" class="counter-tag">1 lines</span>
+            <button id="clear-btn" class="btn btn-ghost" title="Clear Editor">Clear</button>
+          </div>
+        </div>
+        <div class="editor-container">
+          <div id="py-gutter" class="gutter">1</div>
+          <textarea id="py-input" class="code-textarea" spellcheck="false" placeholder="# Type or paste Mini-Python source code here..."></textarea>
+        </div>
+      </section>
+
+      <!-- Right Panel: Generated TypeScript Output -->
+      <section class="panel panel-right">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="lang-tag lang-ts">TypeScript</span>
+            <span>Emitted Code</span>
+          </div>
+          <div class="panel-actions">
+            <button id="copy-btn" class="btn btn-secondary" title="Copy TypeScript Output">
+              <span class="copy-icon">📋</span>
+              <span class="copy-text">Copy Code</span>
+            </button>
+          </div>
+        </div>
+        <div class="editor-container">
+          <div id="ts-gutter" class="gutter">1</div>
+          <pre id="ts-output" class="code-display"><code>// Emitted TypeScript code will appear here...</code></pre>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Inspector & Intermediate Stages -->
+    <footer class="inspector-drawer">
+      <div class="inspector-tabs">
+        <button class="tab-btn active" data-tab="tokens">Token Stream</button>
+        <button class="tab-btn" data-tab="symbol-table">Scoped Symbol Table</button>
+        <button class="tab-btn" data-tab="decorated-ast">Type-Decorated AST</button>
+        <button class="tab-btn" data-tab="raw-ast">Raw Untyped AST</button>
+        <button class="tab-btn" data-tab="diagnostics">Diagnostics & Console</button>
+      </div>
+
+      <div class="inspector-content">
+        <!-- Tab 1: Tokens -->
+        <div id="tab-tokens" class="tab-pane active">
+          <div id="tokens-table-container" class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 80px;">Line:Col</th>
+                  <th style="width: 140px;">Type</th>
+                  <th style="width: 160px;">Value</th>
+                  <th>Raw / Virtual Layout Flag</th>
+                </tr>
+              </thead>
+              <tbody id="tokens-body">
+                <tr><td colspan="4" class="empty-state">No tokens analyzed yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 2: Symbol Table -->
+        <div id="tab-symbol-table" class="tab-pane">
+          <pre id="symbol-table-json" class="json-viewer">No symbol table generated yet.</pre>
+        </div>
+
+        <!-- Tab 3: Decorated AST -->
+        <div id="tab-decorated-ast" class="tab-pane">
+          <pre id="decorated-ast-json" class="json-viewer">No decorated AST generated yet.</pre>
+        </div>
+
+        <!-- Tab 4: Raw AST -->
+        <div id="tab-raw-ast" class="tab-pane">
+          <pre id="raw-ast-json" class="json-viewer">No raw AST generated yet.</pre>
+        </div>
+
+        <!-- Tab 5: Diagnostics -->
+        <div id="tab-diagnostics" class="tab-pane">
+          <div id="diagnostics-container" class="diagnostics-view">
+            <div class="diagnostic-card diagnostic-clean">
+              <span class="diagnostic-status-icon">✓</span>
+              <div>
+                <strong>Compiler Ready</strong>
+                <p>No syntax or semantic type errors detected.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast">Code copied to clipboard!</div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

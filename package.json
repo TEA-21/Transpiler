@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "demo": "npx tsx src/demo.ts",
-    "demo:review2": "npx tsx src/demo_review2.ts"
+    "demo:review2": "npx tsx src/demo_review2.ts",
+    "ui": "npx tsx src/ui/server.ts"
   },
   "keywords": [
     "transpiler",

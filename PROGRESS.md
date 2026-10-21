@@ -23,10 +23,16 @@
      - Translates reassignments without duplicate `let` keywords.
      - Maps `print(...)` to `console.log(...)`.
      - Strictly eliminates `any` types; emitted code compiles cleanly under `tsc`.
-   - **Review 2 Demonstration Pipeline:**
+   - **Review 2 Demonstration Pipeline & Interactive Workbench UI:**
      - Created [`demo_review2.py`](file:///d:/Projects/Transpiler/demo_review2.py) containing primitive bindings, while loops, array indexing, and bidirectional function inference.
      - Created runner [`src/demo_review2.ts`](file:///d:/Projects/Transpiler/src/demo_review2.ts) executing the complete 5-stage compiler pipeline and running live negative diagnostic rejection tests.
-     - Added `"demo:review2": "npx tsx src/demo_review2.ts"` to [`package.json`](file:///d:/Projects/Transpiler/package.json).
+     - Built zero-dependency Interactive Compiler Workbench Web UI in [`src/ui/server.ts`](file:///d:/Projects/Transpiler/src/ui/server.ts) and [`src/ui/public/`](file:///d:/Projects/Transpiler/src/ui/public/):
+       - Side-by-side Python input editor and strict TypeScript output viewer.
+       - Preset demonstration selector (Review 2 Full Pipeline, Bidirectional Functions, While Loops & Arrays, and 3 Negative Type Rejection tests).
+       - Live transpilation toggle and `Ctrl+Enter` shortcut.
+       - Bottom inspection drawers: Token stream with virtual `INDENT`/`DEDENT` tags, Scoped Symbol Table tree viewer, Type-Decorated AST, Raw AST, and Diagnostics Console.
+       - Clean, industrial dark theme strictly free of blue/purple gradients or AI slop.
+     - Added `"ui": "npx tsx src/ui/server.ts"` and `"demo:review2": "npx tsx src/demo_review2.ts"` to [`package.json`](file:///d:/Projects/Transpiler/package.json).
 
 2. **Progress Documentation / Technical Report (Rubric: 2 Marks):**
    - Extracted authentic university crest from reference project to [`docs/vit_logo.png`](file:///d:/Projects/Transpiler/docs/vit_logo.png).
