@@ -8,7 +8,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "demo": "npx tsx src/demo.ts"
+    "demo": "npx tsx src/demo.ts",
+    "demo:review2": "npx tsx src/demo_review2.ts"
   },
   "keywords": [
     "transpiler",

@@ -1,71 +1,72 @@
 # Transpiler Project Progress Tracking
 
 ## Current Active Phase
-- **Review 1 Evaluation Demonstration & Verification (`review-1-demo` branch)**
+- **Review 2 Evaluation & Deliverables Verification (`review-2-demo` branch)**
 
 ## Completed Steps & Exact Techniques/Libraries Used
 
-1. **Grammar & AST Expansion (Step 3.3):**
-   - **Lexer Extensions:** Added `LBRACKET` (`[`) and `RBRACKET` (`]`) in [`src/lexer/tokens.ts`](file:///d:/Projects/Transpiler/src/lexer/tokens.ts) and bracket-depth nesting tracking in [`src/lexer/lexer.ts`](file:///d:/Projects/Transpiler/src/lexer/lexer.ts) so multi-line array literals and expressions inside brackets ignore spurious newlines.
-   - **AST Node Hierarchy:** Extended [`src/parser/ast.ts`](file:///d:/Projects/Transpiler/src/parser/ast.ts) with [`WhileStatement`](file:///d:/Projects/Transpiler/src/parser/ast.ts#L34), [`FunctionDeclaration`](file:///d:/Projects/Transpiler/src/parser/ast.ts#L40), [`ReturnStatement`](file:///d:/Projects/Transpiler/src/parser/ast.ts#L49), [`ArrayLiteral`](file:///d:/Projects/Transpiler/src/parser/ast.ts#L112), and [`IndexExpression`](file:///d:/Projects/Transpiler/src/parser/ast.ts#L118).
-   - **Extended Recursive Descent Parser:** Updated [`src/parser/parser.ts`](file:///d:/Projects/Transpiler/src/parser/parser.ts) to parse:
-     - `while` loops with boolean guard validation.
-     - `def` function declarations with formal parameters and statement blocks.
-     - `return` statements (bare or with return expressions).
-     - Homogeneous array literals `[elem1, elem2, ...]`.
-     - Subscript/indexing expressions `obj[index]` with chained postfix evaluation.
+1. **75% Implementation / Prototype Progress (Rubric: 6 Marks):**
+   - **Extended Grammar & AST (Phase 3 Complete):**
+     - Off-side Lexer in [`src/lexer/lexer.ts`](file:///d:/Projects/Transpiler/src/lexer/lexer.ts) with column indentation tracking and `bracketDepth` handling to suppress spurious newlines inside multi-line array literals.
+     - Recursive Descent Parser in [`src/parser/parser.ts`](file:///d:/Projects/Transpiler/src/parser/parser.ts) with full support for `while` loops, `def` functions, `return` statements, homogeneous arrays `[1, 2, 3]`, and subscript indexing `arr[i]`.
+   - **Scoped Symbol Table (Step 3.1):**
+     - Implemented in [`src/semantics/symbolTable.ts`](file:///d:/Projects/Transpiler/src/semantics/symbolTable.ts) supporting nested scopes (`global`, `function`, `loop`, `block`), identifier resolution up scope chains, mutability tracking (`isMutable`), and undefined identifier rejection with [`SemanticError`](file:///d:/Projects/Transpiler/src/errors/diagnostic.ts#L40).
+   - **Type Inference & Robinson Unification Engine (Steps 3.2 & 3.4):**
+     - Implemented in [`src/semantics/types.ts`](file:///d:/Projects/Transpiler/src/semantics/types.ts) and [`src/semantics/unifier.ts`](file:///d:/Projects/Transpiler/src/semantics/unifier.ts) featuring fresh type variables, path compression pruning, and strict occurs checks to prevent circular type structures.
+     - Implemented bidirectional constraint propagation across call-sites and internal parameter operations in [`src/semantics/analyzer.ts`](file:///d:/Projects/Transpiler/src/semantics/analyzer.ts).
+     - Enforced static invariant typing: first assignment establishes static invariant; conflicting reassignments throw compile-time [`TypeError`](file:///d:/Projects/Transpiler/src/errors/diagnostic.ts#L46).
+     - Validated boolean guards for `if` statements and `while` loops.
+   - **Prototype TypeScript Emitter Preview (Step 4.1):**
+     - Implemented Visitor Pattern Emitter in [`src/codegen/emitter.ts`](file:///d:/Projects/Transpiler/src/codegen/emitter.ts) that translates decorated AST nodes into strictly typed TypeScript.
+     - Transforms identifiers to idiomatic `camelCase`.
+     - Synthesizes structural `{}` block braces and semicolons `;`.
+     - Translates reassignments without duplicate `let` keywords.
+     - Maps `print(...)` to `console.log(...)`.
+     - Strictly eliminates `any` types; emitted code compiles cleanly under `tsc`.
+   - **Review 2 Demonstration Pipeline:**
+     - Created [`demo_review2.py`](file:///d:/Projects/Transpiler/demo_review2.py) containing primitive bindings, while loops, array indexing, and bidirectional function inference.
+     - Created runner [`src/demo_review2.ts`](file:///d:/Projects/Transpiler/src/demo_review2.ts) executing the complete 5-stage compiler pipeline and running live negative diagnostic rejection tests.
+     - Added `"demo:review2": "npx tsx src/demo_review2.ts"` to [`package.json`](file:///d:/Projects/Transpiler/package.json).
 
-2. **Strict Type Representation & Unification Engine:**
-   - **Type Hierarchy:** Defined strict algebraic type representations in [`src/semantics/types.ts`](file:///d:/Projects/Transpiler/src/semantics/types.ts): [`PrimitiveType`](file:///d:/Projects/Transpiler/src/semantics/types.ts#L3) (`number`, `string`, `boolean`, `void`), [`ArrayType`](file:///d:/Projects/Transpiler/src/semantics/types.ts#L8), [`FunctionType`](file:///d:/Projects/Transpiler/src/semantics/types.ts#L13), and [`TypeVar`](file:///d:/Projects/Transpiler/src/semantics/types.ts#L19).
-   - **Robinson Unification Algorithm:** Built in [`src/semantics/unifier.ts`](file:///d:/Projects/Transpiler/src/semantics/unifier.ts) with recursive occurs check, path compression/pruning, and structured [`UnificationError`](file:///d:/Projects/Transpiler/src/semantics/unifier.ts#L3) diagnostics.
+2. **Progress Documentation / Technical Report (Rubric: 2 Marks):**
+   - Extracted authentic university crest from reference project to [`docs/vit_logo.png`](file:///d:/Projects/Transpiler/docs/vit_logo.png).
+   - Authored formal 15-section technical report in **ASD-STE100** (Simplified Technical English) without analogies in [`docs/REVIEW_2_DOCUMENTATION.md`](file:///d:/Projects/Transpiler/docs/REVIEW_2_DOCUMENTATION.md).
+   - Created clean HTML template in [`docs/review_2_report.html`](file:///d:/Projects/Transpiler/docs/review_2_report.html).
+   - Automated PDF compilation via [`scripts/generate_pdf.py`](file:///d:/Projects/Transpiler/scripts/generate_pdf.py) using headless Chrome/Edge.
+   - Generated authentic, print-ready PDF reports matching reference formatting:
+     - [`Review 2 Documentation - Transpiler.pdf`](file:///d:/Projects/Transpiler/Review%202%20Documentation%20-%20Transpiler.pdf)
+     - [`docs/Review_2_Documentation.pdf`](file:///d:/Projects/Transpiler/docs/Review_2_Documentation.pdf).
 
-3. **Scope-Aware Symbol Table (Step 3.1):**
-   - Implemented lexical scope chains in [`src/semantics/symbolTable.ts`](file:///d:/Projects/Transpiler/src/semantics/symbolTable.ts) via [`Scope`](file:///d:/Projects/Transpiler/src/semantics/symbolTable.ts#L15) and [`Symbol`](file:///d:/Projects/Transpiler/src/semantics/symbolTable.ts#L5):
-     - Differentiates `global`, `function`, `block`, and `loop` scopes.
-     - Supports lexical chain traversal up ancestor scopes.
-     - Tracks mutability (`isMutable`) and prevents undeclared identifier access via [`SemanticError`](file:///d:/Projects/Transpiler/src/errors/diagnostic.ts#L40).
-     - Added tree-wide hierarchical scope serialization via [`toDumpObject`](file:///d:/Projects/Transpiler/src/semantics/symbolTable.ts#L71).
+3. **Presentation & Q&A Deliverables (Rubric: 2 Marks):**
+   - Created concise 10-slide presentation deck formatted with bullet points in [`docs/REVIEW_2_SLIDES.md`](file:///d:/Projects/Transpiler/docs/REVIEW_2_SLIDES.md).
+   - Created standard 10-question technical defense and viva handbook in [`docs/REVIEW_2_QA.md`](file:///d:/Projects/Transpiler/docs/REVIEW_2_QA.md) covering off-side lexing, Robinson unification, static invariants, and compiler internals in ASD-STE100.
 
-4. **Local Type Inference, Constraint Propagation & Semantic Analyzer (Steps 3.2 & 3.4):**
-   - Implemented [`SemanticAnalyzer`](file:///d:/Projects/Transpiler/src/semantics/analyzer.ts#L52) in [`src/semantics/analyzer.ts`](file:///d:/Projects/Transpiler/src/semantics/analyzer.ts):
-     - **Primitive Inference & Invariant Static Types:** Directly infers `number`, `string`, `boolean` from literals. Ensures subsequent assignments maintain the variable's initial static type; rejects conflicting reassignments (e.g. `count = 10` followed by `count = "Alice"`) with [`TypeError`](file:///d:/Projects/Transpiler/src/errors/diagnostic.ts#L46).
-     - **Binary/Unary Expression Safety:** Validates numeric operands for `-`, `*`, `/`, `%`, comparisons (`<`, `<=`, `>`, `>=`), and unary `+/-`. Supports `string + string` concatenation while blocking illegal string arithmetic or mixed `string + number`. Validates `boolean` operands for `and`, `or`, `not`.
-     - **Guard & Termination Validation:** Strictly evaluates guard conditions in `if` and termination conditions in `while` to `boolean`.
-     - **Bidirectional Constraint Propagation:**
-       - Derives parameter types across AST call sites.
-       - Propagates internal arithmetic operations on parameters (e.g. `x - 5` bounds `x` to `number`).
-       - Unifies return statement expressions across all branching paths; flags incompatible return branches.
-       - Enforces function call arity and argument type constraints.
-     - **Array Constructs & Indexing:** Enforces homogeneous array elements and numeric array indexing.
-     - **AST Node Type Decoration:** Injects inferred type metadata directly onto AST nodes (`inferredType`, `inferredReturnType`, `inferredParamTypes`, `inferredElementType`).
-   - Exposed unified semantic entry point via [`analyzeMiniPython`](file:///d:/Projects/Transpiler/src/index.ts#L17) in [`src/index.ts`](file:///d:/Projects/Transpiler/src/index.ts).
-
-5. **Review 1 Evaluation Demonstration Pipeline:**
-   - Isolated and activated Git branch **`review-1-demo`**.
-   - Placed test program [`demo.py`](file:///d:/Projects/Transpiler/demo.py) showcasing primitive bindings, bidirectional function inference, array indexing inside while loops, and conditional branching.
-   - Built runner [`src/demo.ts`](file:///d:/Projects/Transpiler/src/demo.ts) printing formatted inspect outputs across 4 distinct compiler phases:
-     1. **Lexical Analysis:** Token stream with highlighted virtual `INDENT` and `DEDENT` tokens.
-     2. **AST Generation:** Raw untyped recursive descent AST.
-     3. **Type Inference:** Decorated AST showcasing `inferredType`, `inferredReturnType`, `inferredParamTypes`.
-     4. **Symbol Table:** Full hierarchical dump of scope chains (`global`, `function`, `loop`, `block`).
-   - Configured `"demo": "npx tsx src/demo.ts"` script in [`package.json`](file:///d:/Projects/Transpiler/package.json).
-
-6. **Test Verification & Quality Assurance:**
-   - 52 passing unit tests across 3 suites (`52/52`):
+4. **Test Verification & Quality Assurance:**
+   - **59 / 59 passing unit tests** across 4 test suites:
      - [`tests/lexer.test.ts`](file:///d:/Projects/Transpiler/tests/lexer.test.ts): 10 tests passing.
      - [`tests/parser.test.ts`](file:///d:/Projects/Transpiler/tests/parser.test.ts): 15 tests passing.
      - [`tests/semantics.test.ts`](file:///d:/Projects/Transpiler/tests/semantics.test.ts): 27 tests passing.
-   - Clean compilation under strict TypeScript (`tsc --noEmit` and `npm run build` exit code 0).
-   - `npm run demo` executed cleanly with 0 errors.
+     - [`tests/emitter.test.ts`](file:///d:/Projects/Transpiler/tests/emitter.test.ts): 7 tests passing.
+   - Clean compilation under strict TypeScript (`tsc --noEmit` exit code 0).
+   - Clean demo execution (`npm run demo:review2` exit code 0).
 
 ## Files Created or Modified
-- [`demo.py`](file:///d:/Projects/Transpiler/demo.py)
-- [`src/demo.ts`](file:///d:/Projects/Transpiler/src/demo.ts)
+- [`src/codegen/emitter.ts`](file:///d:/Projects/Transpiler/src/codegen/emitter.ts)
+- [`src/codegen/index.ts`](file:///d:/Projects/Transpiler/src/codegen/index.ts)
+- [`src/index.ts`](file:///d:/Projects/Transpiler/src/index.ts)
+- [`tests/emitter.test.ts`](file:///d:/Projects/Transpiler/tests/emitter.test.ts)
+- [`demo_review2.py`](file:///d:/Projects/Transpiler/demo_review2.py)
+- [`src/demo_review2.ts`](file:///d:/Projects/Transpiler/src/demo_review2.ts)
 - [`package.json`](file:///d:/Projects/Transpiler/package.json)
-- [`tsconfig.json`](file:///d:/Projects/Transpiler/tsconfig.json)
-- [`src/semantics/symbolTable.ts`](file:///d:/Projects/Transpiler/src/semantics/symbolTable.ts)
-- [`src/semantics/analyzer.ts`](file:///d:/Projects/Transpiler/src/semantics/analyzer.ts)
+- [`docs/vit_logo.png`](file:///d:/Projects/Transpiler/docs/vit_logo.png)
+- [`docs/REVIEW_2_DOCUMENTATION.md`](file:///d:/Projects/Transpiler/docs/REVIEW_2_DOCUMENTATION.md)
+- [`docs/review_2_report.html`](file:///d:/Projects/Transpiler/docs/review_2_report.html)
+- [`scripts/generate_pdf.py`](file:///d:/Projects/Transpiler/scripts/generate_pdf.py)
+- [`Review 2 Documentation - Transpiler.pdf`](file:///d:/Projects/Transpiler/Review%202%20Documentation%20-%20Transpiler.pdf)
+- [`docs/Review_2_Documentation.pdf`](file:///d:/Projects/Transpiler/docs/Review_2_Documentation.pdf)
+- [`docs/REVIEW_2_SLIDES.md`](file:///d:/Projects/Transpiler/docs/REVIEW_2_SLIDES.md)
+- [`docs/REVIEW_2_QA.md`](file:///d:/Projects/Transpiler/docs/REVIEW_2_QA.md)
 - [`PROGRESS.md`](file:///d:/Projects/Transpiler/PROGRESS.md)
 
 ## Next Immediate Action
-- Await manual user review and approval before proceeding to Phase 3 (TypeScript Code Generation / Visitor Pattern Emitter, CLI, and end-to-end integration tests).
+- Prepare for final Review 3 milestone (CLI distribution wrapper, automated transpile-and-compile pipeline testing with `tsc`, and IEEE-format research manuscript).
