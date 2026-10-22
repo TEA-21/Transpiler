@@ -134,7 +134,42 @@
 
         <!-- Tab 2: Symbol Table -->
         <div id="tab-symbol-table" class="tab-pane">
-          <pre id="symbol-table-json" class="json-viewer">No symbol table generated yet.</pre>
+          <div class="ast-toolbar">
+            <div class="ast-mode-group">
+              <button class="btn-tool-toggle active" data-pane="tab-symbol-table" data-view="scoped">Scoped Tables</button>
+              <button class="btn-tool-toggle" data-pane="tab-symbol-table" data-view="unified">Unified Table</button>
+              <button class="btn-tool-toggle" data-pane="tab-symbol-table" data-view="json">JSON View</button>
+            </div>
+            <div class="ast-actions">
+              <span class="info-tag" id="sym-count-tag">0 Scopes | 0 Symbols</span>
+            </div>
+          </div>
+
+          <!-- Hierarchical Scoped Tables Container -->
+          <div id="symbol-table-scoped" class="scoped-tables-container">
+            <div class="empty-state">No symbol table generated yet.</div>
+          </div>
+
+          <!-- Unified Consolidated Table Container -->
+          <div id="symbol-table-unified" class="table-container" style="display: none; padding: 12px 16px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 150px;">Symbol</th>
+                  <th style="width: 180px;">Type</th>
+                  <th style="width: 140px;">Kind</th>
+                  <th>Scope Hierarchy Path</th>
+                  <th style="width: 130px;">Mutability</th>
+                </tr>
+              </thead>
+              <tbody id="unified-symbols-body">
+                <tr><td colspan="5" class="empty-state">No symbols analyzed yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Raw JSON View -->
+          <pre id="symbol-table-json" class="json-viewer" style="display: none;">No symbol table generated yet.</pre>
         </div>
 
         <!-- Tab 3: Decorated AST -->

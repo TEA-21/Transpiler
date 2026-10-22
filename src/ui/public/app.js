@@ -105,6 +105,11 @@ const metricAst = document.getElementById('metric-ast');
 
 const tokensBody = document.getElementById('tokens-body');
 const symbolTableJson = document.getElementById('symbol-table-json');
+const symbolTableScoped = document.getElementById('symbol-table-scoped');
+const symbolTableUnified = document.getElementById('symbol-table-unified');
+const unifiedSymbolsBody = document.getElementById('unified-symbols-body');
+const symCountTag = document.getElementById('sym-count-tag');
+
 const decoratedAstJson = document.getElementById('decorated-ast-json');
 const rawAstJson = document.getElementById('raw-ast-json');
 const decoratedAstTree = document.getElementById('decorated-ast-tree');
@@ -178,8 +183,10 @@ async function executeTranspile() {
       // Render Tokens
       renderTokens(data.tokens);
 
-      // Render Symbol Table
+      // Render Symbol Table (Hierarchical Scoped Tables, Unified Table, and JSON)
       symbolTableJson.textContent = JSON.stringify(data.symbolTable, null, 2);
+      renderScopedSymbolTables(data.symbolTable);
+      renderUnifiedSymbolTable(data.symbolTable);
 
       // Render ASTs
       decoratedAstJson.textContent = JSON.stringify(data.decoratedAst, null, 2);
@@ -208,6 +215,10 @@ async function executeTranspile() {
 
       tsOutput.innerHTML = `<code style="color: var(--status-red);">/* Compilation Failed: [${data.errorType}] ${escapeHtml(data.message)} */</code>`;
       updateGutter('1', tsGutter);
+
+      if (symbolTableScoped) symbolTableScoped.innerHTML = '<div class="empty-state">Compilation failed. No symbol table available.</div>';
+      if (unifiedSymbolsBody) unifiedSymbolsBody.innerHTML = '<tr><td colspan="5" class="empty-state">Compilation failed.</td></tr>';
+      if (symCountTag) symCountTag.textContent = '0 Scopes | 0 Symbols';
 
       if (decoratedAstDiagram) decoratedAstDiagram.innerHTML = '<div class="empty-state">Compilation failed. No AST available.</div>';
       if (rawAstDiagram) rawAstDiagram.innerHTML = '<div class="empty-state">Compilation failed. No AST available.</div>';
@@ -1221,6 +1232,36 @@ document.querySelectorAll('.btn-tool-toggle').forEach((btn) => {
     const diagramActionsEl = document.getElementById(isDecorated ? 'decorated-diagram-actions' : 'raw-diagram-actions');
     const treeActionsEl = document.getElementById(isDecorated ? 'decorated-tree-actions' : 'raw-tree-actions');
 
+    // Handle Tab 2: Symbol Table toggles
+    if (paneId === 'tab-symbol-table') {
+      const scopedEl = document.getElementById('symbol-table-scoped');
+      const unifiedEl = document.getElementById('symbol-table-unified');
+      const jsonEl = document.getElementById('symbol-table-json');
+
+      if (view === 'scoped') {
+        if (scopedEl) scopedEl.style.display = 'flex';
+        if (unifiedEl) unifiedEl.style.display = 'none';
+        if (jsonEl) jsonEl.style.display = 'none';
+      } else if (view === 'unified') {
+        if (scopedEl) scopedEl.style.display = 'none';
+        if (unifiedEl) unifiedEl.style.display = 'block';
+        if (jsonEl) jsonEl.style.display = 'none';
+      } else {
+        if (scopedEl) scopedEl.style.display = 'none';
+        if (unifiedEl) unifiedEl.style.display = 'none';
+        if (jsonEl) jsonEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Handle AST Tabs (Decorated & Raw)
+    const diagramEl = pane.querySelector('.ast-diagram-viewport');
+    const treeEl = pane.querySelector('.ast-tree-view');
+    const jsonEl = pane.querySelector('.json-viewer');
+    const isDecorated = paneId.includes('decorated');
+    const diagramActionsEl = document.getElementById(isDecorated ? 'decorated-diagram-actions' : 'raw-diagram-actions');
+    const treeActionsEl = document.getElementById(isDecorated ? 'decorated-tree-actions' : 'raw-tree-actions');
+
     if (view === 'diagram') {
       if (diagramEl) diagramEl.style.display = 'block';
       if (treeEl) treeEl.style.display = 'none';
@@ -1247,6 +1288,194 @@ document.querySelectorAll('.btn-tool-toggle').forEach((btn) => {
     }
   });
 });
+
+// --------------------------------------------------------------------------
+// Scoped Symbol Table Renderer (Hierarchical Tree of Tables)
+// --------------------------------------------------------------------------
+
+function formatScopeTypeBadge(type) {
+  switch (type) {
+    case 'global':
+      return '<span class="scope-badge badge-global">Global Scope</span>';
+    case 'function':
+      return '<span class="scope-badge badge-function">Procedure / Function Scope</span>';
+    case 'loop':
+      return '<span class="scope-badge badge-loop">Loop Scope</span>';
+    case 'block':
+      return '<span class="scope-badge badge-block">Inner Block Scope</span>';
+    default:
+      return `<span class="scope-badge">${escapeHtml(type)}</span>`;
+  }
+}
+
+function formatKindBadge(kind, scopeType) {
+  switch (kind) {
+    case 'function':
+      return '<span class="sym-kind">Procedure</span>';
+    case 'parameter':
+      return '<span class="sym-kind">Procedure Parameter</span>';
+    case 'variable':
+      if (scopeType === 'global') return '<span class="sym-kind">Global Variable</span>';
+      if (scopeType === 'block') return '<span class="sym-kind">Inner Variable</span>';
+      return '<span class="sym-kind">Local Variable</span>';
+    default:
+      return `<span class="sym-kind">${escapeHtml(kind)}</span>`;
+  }
+}
+
+function buildScopeCardElement(scope) {
+  const card = document.createElement('div');
+  card.className = 'scope-card';
+  card.setAttribute('data-scope-type', scope.scopeType || 'block');
+
+  const symbolEntries = Object.entries(scope.symbols || {});
+  const numSymbols = symbolEntries.length;
+
+  const header = document.createElement('div');
+  header.className = 'scope-header';
+  header.innerHTML = `
+    <div class="scope-title">
+      ${formatScopeTypeBadge(scope.scopeType)}
+      <span class="scope-name">${escapeHtml(scope.scopeName)}</span>
+    </div>
+    <span class="scope-sym-count">${numSymbols} local symbol${numSymbols === 1 ? '' : 's'}</span>
+  `;
+  card.appendChild(header);
+
+  // Green header table - matching reference diagram
+  const table = document.createElement('table');
+  table.className = 'scope-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th style="width: 170px;">Symbol</th>
+        <th style="width: 220px;">Type</th>
+        <th style="width: 200px;">Scope / Kind</th>
+        <th>Mutability Invariant</th>
+      </tr>
+    </thead>
+  `;
+
+  const tbody = document.createElement('tbody');
+  if (symbolEntries.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="scope-empty-row">No local symbols declared in this block (inherits from parent scope)</td></tr>`;
+  } else {
+    for (const [name, sym] of symbolEntries) {
+      const tr = document.createElement('tr');
+      const mutBadge = sym.isMutable
+        ? '<span class="sym-mut-mut">Mutable (Reassigned)</span>'
+        : '<span class="sym-mut-const">Static Invariant (Const)</span>';
+
+      tr.innerHTML = `
+        <td><code class="sym-name">${escapeHtml(name)}</code></td>
+        <td><span class="sym-type">${escapeHtml(sym.type)}</span></td>
+        <td>${formatKindBadge(sym.kind, scope.scopeType)}</td>
+        <td>${mutBadge}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+  table.appendChild(tbody);
+  card.appendChild(table);
+
+  // If child scopes exist, render branch connector and child cards
+  if (scope.children && scope.children.length > 0) {
+    const branch = document.createElement('div');
+    branch.className = 'scope-children-branch';
+    for (const childScope of scope.children) {
+      branch.appendChild(buildScopeCardElement(childScope));
+    }
+    card.appendChild(branch);
+  }
+
+  return card;
+}
+
+function countTotalScopesAndSymbols(scope) {
+  let scopes = 1;
+  let symbols = Object.keys(scope.symbols || {}).length;
+  if (scope.children) {
+    for (const c of scope.children) {
+      const res = countTotalScopesAndSymbols(c);
+      scopes += res.scopes;
+      symbols += res.symbols;
+    }
+  }
+  return { scopes, symbols };
+}
+
+function renderScopedSymbolTables(rootScope) {
+  if (!symbolTableScoped) return;
+  symbolTableScoped.innerHTML = '';
+
+  if (!rootScope) {
+    symbolTableScoped.innerHTML = '<div class="empty-state">No symbol table generated yet.</div>';
+    if (symCountTag) symCountTag.textContent = '0 Scopes | 0 Symbols';
+    return;
+  }
+
+  const { scopes, symbols } = countTotalScopesAndSymbols(rootScope);
+  if (symCountTag) {
+    symCountTag.textContent = `${scopes} Scope${scopes === 1 ? '' : 's'} | ${symbols} Symbol${symbols === 1 ? '' : 's'}`;
+  }
+
+  const rootCard = buildScopeCardElement(rootScope);
+  symbolTableScoped.appendChild(rootCard);
+}
+
+function renderUnifiedSymbolTable(rootScope) {
+  if (!unifiedSymbolsBody) return;
+  unifiedSymbolsBody.innerHTML = '';
+
+  if (!rootScope) {
+    unifiedSymbolsBody.innerHTML = '<tr><td colspan="5" class="empty-state">No symbols generated yet.</td></tr>';
+    return;
+  }
+
+  const allRows = [];
+  function collectSymbols(scope, path) {
+    const currentPath = path ? `${path} > ${scope.scopeName}` : scope.scopeName;
+    for (const [name, sym] of Object.entries(scope.symbols || {})) {
+      allRows.push({
+        name,
+        type: sym.type,
+        kind: sym.kind,
+        scopeType: scope.scopeType,
+        path: currentPath,
+        isMutable: sym.isMutable,
+      });
+    }
+    if (scope.children) {
+      for (const child of scope.children) {
+        collectSymbols(child, currentPath);
+      }
+    }
+  }
+
+  collectSymbols(rootScope, '');
+
+  if (allRows.length === 0) {
+    unifiedSymbolsBody.innerHTML = '<tr><td colspan="5" class="empty-state">No symbols found.</td></tr>';
+    return;
+  }
+
+  const rowsHtml = allRows.map((item) => {
+    const mutBadge = item.isMutable
+      ? '<span class="sym-mut-mut">Mutable</span>'
+      : '<span class="sym-mut-const">Static Invariant</span>';
+    return `
+      <tr>
+        <td><code class="sym-name">${escapeHtml(item.name)}</code></td>
+        <td><span class="sym-type">${escapeHtml(item.type)}</span></td>
+        <td>${formatKindBadge(item.kind, item.scopeType)}</td>
+        <td><code>${escapeHtml(item.path)}</code></td>
+        <td>${mutBadge}</td>
+      </tr>
+    `;
+  });
+
+  unifiedSymbolsBody.innerHTML = rowsHtml.join('');
+}
 
 if (decoratedZoomIn) {
   decoratedZoomIn.addEventListener('click', () => zoomDiagram(decoratedDiagramState, 1.25));

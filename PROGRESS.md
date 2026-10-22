@@ -31,6 +31,11 @@
        - Preset demonstration selector (Review 2 Full Pipeline, Bidirectional Functions, While Loops & Arrays, and 3 Negative Type Rejection tests).
        - Live transpilation toggle and `Ctrl+Enter` shortcut.
        - Bottom inspection drawers: Token stream with virtual `INDENT`/`DEDENT` tags, Scoped Symbol Table tree viewer, Type-Decorated AST, Raw AST, and Diagnostics Console.
+       - **Hierarchical Tree of Scoped Symbol Tables:** Replaced raw JSON with authentic structured tables matching academic compiler diagrams:
+         - Green header banners (`Symbol`, `Type`, `Scope / Kind`, `Mutability Invariant`).
+         - Scope bounding boxes color-coded by scope level: Global (Blue), Procedures (Red), Loops (Light Blue), and Inner Blocks (Purple).
+         - Scope tree branches connecting parent scopes to child scopes (`↳ Child Scope`).
+         - 3-way view toggle: `[Scoped Tables]` (hierarchical tree of tables), `[Unified Table]` (consolidated table of all symbols), and `[JSON View]`.
        - **2D Graphical AST Tree Diagram (Node-Link Visualizer):** Added visual SVG tree diagram matching classic compiler tree specifications:
          - Blue boxes for statements/blocks (`while`, `branch`, `assign`, `return`, `function`, `compare`, `statement sequence`).
          - Green boxes for variables / identifiers (`variable name: x`).
