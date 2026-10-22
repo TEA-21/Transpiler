@@ -139,12 +139,38 @@
 
         <!-- Tab 3: Decorated AST -->
         <div id="tab-decorated-ast" class="tab-pane">
-          <pre id="decorated-ast-json" class="json-viewer">No decorated AST generated yet.</pre>
+          <div class="ast-toolbar">
+            <div class="ast-mode-group">
+              <button class="btn-tool-toggle active" data-pane="tab-decorated-ast" data-view="tree">Tree View</button>
+              <button class="btn-tool-toggle" data-pane="tab-decorated-ast" data-view="json">JSON View</button>
+            </div>
+            <div class="ast-actions" id="decorated-tree-actions">
+              <button class="btn-tool" id="decorated-expand-all" title="Expand all tree nodes">Expand All</button>
+              <button class="btn-tool" id="decorated-collapse-all" title="Collapse all tree nodes">Collapse All</button>
+            </div>
+          </div>
+          <div id="decorated-ast-tree" class="ast-tree-view">
+            <div class="empty-state">No decorated AST generated yet.</div>
+          </div>
+          <pre id="decorated-ast-json" class="json-viewer" style="display: none;">No decorated AST generated yet.</pre>
         </div>
 
         <!-- Tab 4: Raw AST -->
         <div id="tab-raw-ast" class="tab-pane">
-          <pre id="raw-ast-json" class="json-viewer">No raw AST generated yet.</pre>
+          <div class="ast-toolbar">
+            <div class="ast-mode-group">
+              <button class="btn-tool-toggle active" data-pane="tab-raw-ast" data-view="tree">Tree View</button>
+              <button class="btn-tool-toggle" data-pane="tab-raw-ast" data-view="json">JSON View</button>
+            </div>
+            <div class="ast-actions" id="raw-tree-actions">
+              <button class="btn-tool" id="raw-expand-all" title="Expand all tree nodes">Expand All</button>
+              <button class="btn-tool" id="raw-collapse-all" title="Collapse all tree nodes">Collapse All</button>
+            </div>
+          </div>
+          <div id="raw-ast-tree" class="ast-tree-view">
+            <div class="empty-state">No raw AST generated yet.</div>
+          </div>
+          <pre id="raw-ast-json" class="json-viewer" style="display: none;">No raw AST generated yet.</pre>
         </div>
 
         <!-- Tab 5: Diagnostics -->

@@ -107,6 +107,12 @@ const tokensBody = document.getElementById('tokens-body');
 const symbolTableJson = document.getElementById('symbol-table-json');
 const decoratedAstJson = document.getElementById('decorated-ast-json');
 const rawAstJson = document.getElementById('raw-ast-json');
+const decoratedAstTree = document.getElementById('decorated-ast-tree');
+const rawAstTree = document.getElementById('raw-ast-tree');
+const decoratedExpandAll = document.getElementById('decorated-expand-all');
+const decoratedCollapseAll = document.getElementById('decorated-collapse-all');
+const rawExpandAll = document.getElementById('raw-expand-all');
+const rawCollapseAll = document.getElementById('raw-collapse-all');
 const diagnosticsContainer = document.getElementById('diagnostics-container');
 
 let debounceTimer = null;
@@ -166,6 +172,9 @@ async function executeTranspile() {
       decoratedAstJson.textContent = JSON.stringify(data.decoratedAst, null, 2);
       rawAstJson.textContent = JSON.stringify(data.rawAst, null, 2);
 
+      renderAstTree(data.decoratedAst, decoratedAstTree, true);
+      renderAstTree(data.rawAst, rawAstTree, false);
+
       // Diagnostics Clean
       diagnosticsContainer.innerHTML = `
         <div class="diagnostic-card diagnostic-clean">
@@ -183,6 +192,9 @@ async function executeTranspile() {
 
       tsOutput.innerHTML = `<code style="color: var(--status-red);">/* Compilation Failed: [${data.errorType}] ${escapeHtml(data.message)} */</code>`;
       updateGutter('1', tsGutter);
+
+      if (decoratedAstTree) decoratedAstTree.innerHTML = '<div class="empty-state">Compilation failed. No AST available.</div>';
+      if (rawAstTree) rawAstTree.innerHTML = '<div class="empty-state">Compilation failed. No AST available.</div>';
 
       diagnosticsContainer.innerHTML = `
         <div class="diagnostic-card diagnostic-error">
@@ -286,6 +298,381 @@ copyBtn.addEventListener('click', () => {
     showToast('Strict TypeScript copied to clipboard!');
   });
 });
+
+// --------------------------------------------------------------------------
+// AST Tree Rendering & Editor Synchronization
+// --------------------------------------------------------------------------
+
+function jumpToSourceLine(line, col) {
+  const text = pyInput.value;
+  const lines = text.split('\n');
+  if (!line || line < 1 || line > lines.length) return;
+
+  let charIndex = 0;
+  for (let i = 0; i < line - 1; i++) {
+    charIndex += lines[i].length + 1; // +1 for '\n'
+  }
+  const lineStart = charIndex;
+  const lineEnd = charIndex + lines[line - 1].length;
+
+  pyInput.focus();
+  pyInput.setSelectionRange(lineStart, lineEnd);
+
+  // Scroll textarea smoothly to the targeted line
+  const lineHeight = 20; // 20px per line in editor
+  pyInput.scrollTop = Math.max(0, (line - 3) * lineHeight);
+  pyGutter.scrollTop = pyInput.scrollTop;
+}
+
+function getNodeSummary(node) {
+  if (!node || typeof node !== 'object') return '';
+  switch (node.type) {
+    case 'Program':
+      return `${(node.body || []).length} statements`;
+    case 'VariableDeclaration':
+      return node.id ? node.id.name : '';
+    case 'FunctionDeclaration': {
+      const name = node.id ? node.id.name : 'anonymous';
+      const params = (node.params || []).map((p) => p.name || 'arg').join(', ');
+      return `${name}(${params})`;
+    }
+    case 'IfStatement':
+      return node.alternate ? 'if / else' : 'if';
+    case 'WhileStatement':
+      return 'while loop';
+    case 'BlockStatement':
+      return `${(node.body || []).length} statements`;
+    case 'ReturnStatement':
+      return node.argument ? '' : 'void';
+    case 'BinaryExpression':
+      return node.operator || '';
+    case 'UnaryExpression':
+      return node.operator || '';
+    case 'Identifier':
+      return node.name || '';
+    case 'Literal':
+      return String(node.value !== undefined ? JSON.stringify(node.value) : (node.raw || ''));
+    case 'ArrayExpression':
+      return `[${(node.elements || []).length} items]`;
+    case 'SubscriptExpression':
+      return 'index lookup';
+    case 'CallExpression': {
+      const fnName = node.callee ? (node.callee.name || 'fn') : 'fn';
+      return `${fnName}(...)`;
+    }
+    case 'ExpressionStatement':
+      return '';
+    default:
+      return '';
+  }
+}
+
+function getInferredTypeBadge(node, isDecorated) {
+  if (!isDecorated || !node) return '';
+  if (node.inferredType) {
+    return `: ${node.inferredType}`;
+  }
+  if (node.inferredReturnType) {
+    return `-> ${node.inferredReturnType}`;
+  }
+  return '';
+}
+
+function toggleNodeExpansion(expander, childrenBlock) {
+  const isCollapsed = childrenBlock.classList.toggle('collapsed');
+  expander.classList.toggle('collapsed', isCollapsed);
+  expander.textContent = isCollapsed ? '▸' : '▾';
+}
+
+function expandAll(container) {
+  if (!container) return;
+  const childBlocks = container.querySelectorAll('.ast-node-children');
+  childBlocks.forEach((el) => el.classList.remove('collapsed'));
+  const expanders = container.querySelectorAll('.ast-expander:not(.leaf-expander)');
+  expanders.forEach((el) => {
+    el.classList.remove('collapsed');
+    el.textContent = '▾';
+  });
+}
+
+function collapseAll(container) {
+  if (!container) return;
+  // Keep root open, collapse direct children and below
+  const childBlocks = container.querySelectorAll('.ast-node-children');
+  childBlocks.forEach((el) => el.classList.add('collapsed'));
+  const expanders = container.querySelectorAll('.ast-expander:not(.leaf-expander)');
+  expanders.forEach((el) => {
+    el.classList.add('collapsed');
+    el.textContent = '▸';
+  });
+  // Open root node children so the top-level statements remain accessible
+  const rootChildren = container.querySelector('.ast-root-node > .ast-node-children');
+  const rootExpander = container.querySelector('.ast-root-node > .ast-node-row > .ast-expander');
+  if (rootChildren) {
+    rootChildren.classList.remove('collapsed');
+  }
+  if (rootExpander) {
+    rootExpander.classList.remove('collapsed');
+    rootExpander.textContent = '▾';
+  }
+}
+
+function buildAstNodeElement(node, propKey = '', depth = 0, isDecorated = false) {
+  if (!node || typeof node !== 'object') {
+    const leaf = document.createElement('div');
+    leaf.className = 'ast-tree-node';
+    leaf.innerHTML = `<span class="ast-prop-key">${escapeHtml(propKey)}:</span> <span class="ast-badge-val">${escapeHtml(String(node))}</span>`;
+    return leaf;
+  }
+
+  const isAstNode = typeof node.type === 'string';
+  const nodeEl = document.createElement('div');
+  nodeEl.className = 'ast-tree-node' + (depth === 0 ? ' ast-root-node' : '');
+
+  // Extract children and non-metadata properties
+  const childKeys = [];
+  const primitiveProps = [];
+
+  for (const [key, val] of Object.entries(node)) {
+    if (
+      key === 'type' ||
+      key === 'loc' ||
+      key === 'raw' ||
+      key === 'inferredType' ||
+      key === 'inferredReturnType' ||
+      key === 'inferredParamTypes'
+    ) {
+      continue;
+    }
+    if (val && typeof val === 'object') {
+      if (Array.isArray(val)) {
+        if (val.length > 0) {
+          childKeys.push({ key, val, isArray: true });
+        }
+      } else if (typeof val.type === 'string') {
+        childKeys.push({ key, val, isArray: false });
+      }
+    } else if (val !== undefined && key !== 'operator' && key !== 'name' && key !== 'value') {
+      primitiveProps.push({ key, val });
+    }
+  }
+
+  const hasChildren = childKeys.length > 0 || primitiveProps.length > 0;
+  // Auto-expand top 2 levels by default (depth 0 Program, depth 1 Statements)
+  const initiallyExpanded = depth <= 1;
+
+  // Header row
+  const row = document.createElement('div');
+  row.className = 'ast-node-row';
+
+  // Expander arrow
+  const expander = document.createElement('span');
+  expander.className =
+    'ast-expander' + (!hasChildren ? ' leaf-expander' : (initiallyExpanded ? '' : ' collapsed'));
+  expander.textContent = hasChildren ? (initiallyExpanded ? '▾' : '▸') : '•';
+  row.appendChild(expander);
+
+  // Property label if this is a named child property (e.g. "init:", "test:", "left:")
+  if (propKey && !/^\d+$/.test(propKey)) {
+    const propSpan = document.createElement('span');
+    propSpan.className = 'ast-prop-key';
+    propSpan.textContent = `${propKey}:`;
+    row.appendChild(propSpan);
+  }
+
+  // Node type badge
+  if (isAstNode) {
+    const typeSpan = document.createElement('span');
+    typeSpan.className = 'ast-badge-type';
+    typeSpan.textContent = node.type;
+    row.appendChild(typeSpan);
+  }
+
+  // Summary / value
+  const summary = getNodeSummary(node);
+  if (summary) {
+    const summarySpan = document.createElement('span');
+    summarySpan.className =
+      node.type === 'BinaryExpression' || node.type === 'UnaryExpression'
+        ? 'ast-badge-op'
+        : 'ast-badge-val';
+    summarySpan.textContent = summary;
+    row.appendChild(summarySpan);
+  }
+
+  // Inferred Type Badge (if decorated)
+  const inferred = getInferredTypeBadge(node, isDecorated);
+  if (inferred) {
+    const inferredSpan = document.createElement('span');
+    inferredSpan.className = 'ast-badge-inferred';
+    inferredSpan.textContent = inferred;
+    row.appendChild(inferredSpan);
+  }
+
+  // Location badge
+  if (node.loc && node.loc.start) {
+    const locSpan = document.createElement('span');
+    locSpan.className = 'ast-badge-loc';
+    locSpan.textContent = `L${node.loc.start.line}:C${node.loc.start.column}`;
+    row.appendChild(locSpan);
+  }
+
+  nodeEl.appendChild(row);
+
+  // Children container
+  if (hasChildren) {
+    const childrenContainer = document.createElement('div');
+    childrenContainer.className = 'ast-node-children' + (initiallyExpanded ? '' : ' collapsed');
+
+    // Expander arrow click
+    expander.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleNodeExpansion(expander, childrenContainer);
+    });
+
+    // Primitive extra properties
+    primitiveProps.forEach(({ key, val }) => {
+      const propRow = document.createElement('div');
+      propRow.className = 'ast-tree-node';
+      propRow.innerHTML = `<span class="ast-prop-key">${escapeHtml(key)}:</span> <span class="ast-badge-val">${escapeHtml(String(val))}</span>`;
+      childrenContainer.appendChild(propRow);
+    });
+
+    // Child AST nodes and arrays
+    childKeys.forEach(({ key, val, isArray }) => {
+      if (isArray) {
+        if (val.length === 1 && typeof val[0].type === 'string') {
+          childrenContainer.appendChild(
+            buildAstNodeElement(val[0], `${key}[0]`, depth + 1, isDecorated)
+          );
+        } else {
+          const groupEl = document.createElement('div');
+          groupEl.className = 'ast-tree-node';
+          const groupRow = document.createElement('div');
+          groupRow.className = 'ast-node-row';
+          const groupExpander = document.createElement('span');
+          const groupExpanded = depth + 1 <= 1;
+          groupExpander.className = 'ast-expander' + (groupExpanded ? '' : ' collapsed');
+          groupExpander.textContent = groupExpanded ? '▾' : '▸';
+          groupRow.appendChild(groupExpander);
+
+          const groupLabel = document.createElement('span');
+          groupLabel.className = 'ast-prop-key';
+          groupLabel.textContent = `${key}: [${val.length}]`;
+          groupRow.appendChild(groupLabel);
+          groupEl.appendChild(groupRow);
+
+          const groupChildren = document.createElement('div');
+          groupChildren.className = 'ast-node-children' + (groupExpanded ? '' : ' collapsed');
+
+          groupExpander.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleNodeExpansion(groupExpander, groupChildren);
+          });
+          groupRow.addEventListener('click', (e) => {
+            if (e.target !== groupExpander) {
+              toggleNodeExpansion(groupExpander, groupChildren);
+            }
+          });
+
+          val.forEach((item, idx) => {
+            groupChildren.appendChild(buildAstNodeElement(item, `[${idx}]`, depth + 2, isDecorated));
+          });
+          groupEl.appendChild(groupChildren);
+          childrenContainer.appendChild(groupEl);
+        }
+      } else {
+        childrenContainer.appendChild(buildAstNodeElement(val, key, depth + 1, isDecorated));
+      }
+    });
+
+    nodeEl.appendChild(childrenContainer);
+
+    // Row click: toggle expansion AND jump to line
+    row.addEventListener('click', (e) => {
+      if (e.target !== expander) {
+        toggleNodeExpansion(expander, childrenContainer);
+      }
+      document
+        .querySelectorAll('.ast-node-row.active-selection')
+        .forEach((el) => el.classList.remove('active-selection'));
+      row.classList.add('active-selection');
+
+      if (node.loc && node.loc.start) {
+        jumpToSourceLine(node.loc.start.line, node.loc.start.column);
+      }
+    });
+  } else {
+    // Leaf node row click: highlight and jump to line
+    row.addEventListener('click', () => {
+      document
+        .querySelectorAll('.ast-node-row.active-selection')
+        .forEach((el) => el.classList.remove('active-selection'));
+      row.classList.add('active-selection');
+
+      if (node.loc && node.loc.start) {
+        jumpToSourceLine(node.loc.start.line, node.loc.start.column);
+      }
+    });
+  }
+
+  return nodeEl;
+}
+
+function renderAstTree(ast, container, isDecorated) {
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!ast) {
+    container.innerHTML = `<div class="empty-state">No ${isDecorated ? 'decorated' : 'raw'} AST generated yet.</div>`;
+    return;
+  }
+
+  const rootEl = buildAstNodeElement(ast, '', 0, isDecorated);
+  container.appendChild(rootEl);
+}
+
+// --------------------------------------------------------------------------
+// AST Toolbar Handlers & View Toggles
+// --------------------------------------------------------------------------
+document.querySelectorAll('.btn-tool-toggle').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const paneId = btn.getAttribute('data-pane');
+    const view = btn.getAttribute('data-view');
+    const pane = document.getElementById(paneId);
+    if (!pane) return;
+
+    pane.querySelectorAll('.btn-tool-toggle').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const treeEl = pane.querySelector('.ast-tree-view');
+    const jsonEl = pane.querySelector('.json-viewer');
+    const actionsEl = pane.querySelector('.ast-actions');
+
+    if (view === 'tree') {
+      if (treeEl) treeEl.style.display = 'block';
+      if (jsonEl) jsonEl.style.display = 'none';
+      if (actionsEl) actionsEl.style.display = 'flex';
+    } else {
+      if (treeEl) treeEl.style.display = 'none';
+      if (jsonEl) jsonEl.style.display = 'block';
+      if (actionsEl) actionsEl.style.display = 'none';
+    }
+  });
+});
+
+if (decoratedExpandAll) {
+  decoratedExpandAll.addEventListener('click', () => expandAll(decoratedAstTree));
+}
+if (decoratedCollapseAll) {
+  decoratedCollapseAll.addEventListener('click', () => collapseAll(decoratedAstTree));
+}
+if (rawExpandAll) {
+  rawExpandAll.addEventListener('click', () => expandAll(rawAstTree));
+}
+if (rawCollapseAll) {
+  rawCollapseAll.addEventListener('click', () => collapseAll(rawAstTree));
+}
 
 // Inspector Tabs
 const tabButtons = document.querySelectorAll('.tab-btn');

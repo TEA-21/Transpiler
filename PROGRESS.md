@@ -31,6 +31,9 @@
        - Preset demonstration selector (Review 2 Full Pipeline, Bidirectional Functions, While Loops & Arrays, and 3 Negative Type Rejection tests).
        - Live transpilation toggle and `Ctrl+Enter` shortcut.
        - Bottom inspection drawers: Token stream with virtual `INDENT`/`DEDENT` tags, Scoped Symbol Table tree viewer, Type-Decorated AST, Raw AST, and Diagnostics Console.
+       - **Interactive Hierarchical AST Tree Visualization:** Added interactive collapsible AST tree view with depth-based expansion, node type badges, value/operator summaries, source location coordinates (`L:C`), and inferred type chips (`: number`, `: string`, etc.).
+       - **Editor Line Synchronization:** Added click-to-jump on AST nodes that highlights and scrolls to the exact source statement in the Mini-Python code editor.
+       - **Toolbar Controls:** Added Tree View vs Raw JSON dual-mode toggle and global `[Expand All]` / `[Collapse All]` actions for both Decorated and Raw AST tabs.
        - Clean, industrial dark theme strictly free of blue/purple gradients or AI slop.
      - Added `"ui": "npx tsx src/ui/server.ts"` and `"demo:review2": "npx tsx src/demo_review2.ts"` to [`package.json`](file:///d:/Projects/Transpiler/package.json).
 
@@ -57,6 +60,10 @@
    - Clean demo execution (`npm run demo:review2` exit code 0).
 
 ## Files Created or Modified
+- [`PLAN.md`](file:///d:/Projects/Transpiler/PLAN.md)
+- [`src/ui/public/index.html`](file:///d:/Projects/Transpiler/src/ui/public/index.html)
+- [`src/ui/public/style.css`](file:///d:/Projects/Transpiler/src/ui/public/style.css)
+- [`src/ui/public/app.js`](file:///d:/Projects/Transpiler/src/ui/public/app.js)
 - [`src/codegen/emitter.ts`](file:///d:/Projects/Transpiler/src/codegen/emitter.ts)
 - [`src/codegen/index.ts`](file:///d:/Projects/Transpiler/src/codegen/index.ts)
 - [`src/index.ts`](file:///d:/Projects/Transpiler/src/index.ts)
