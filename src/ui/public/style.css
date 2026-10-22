@@ -461,7 +461,7 @@ input:checked + .slider:before {
    4. Bottom Inspector Drawer
    -------------------------------------------------------------------------- */
 .inspector-drawer {
-  height: 240px;
+  height: 340px;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-surface);
@@ -852,4 +852,149 @@ input:checked + .slider:before {
   align-items: center;
   gap: 4px;
 }
+
+/* --------------------------------------------------------------------------
+   6. Graphical AST Tree Diagram (Node-Link 2D Visualizer)
+   -------------------------------------------------------------------------- */
+.ast-diagram-viewport {
+  height: calc(100% - 37px);
+  position: relative;
+  overflow: hidden;
+  background-color: #0b0e14;
+  background-image: radial-gradient(#1e2533 1px, transparent 1px);
+  background-size: 20px 20px;
+  cursor: grab;
+  user-select: none;
+}
+
+.ast-diagram-viewport:active {
+  cursor: grabbing;
+}
+
+.ast-diagram-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Edges / Connector Lines */
+.ast-diagram-edge {
+  stroke: #4d5766;
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  transition: stroke 0.15s ease;
+}
+
+.ast-edge-label-group {
+  pointer-events: none;
+}
+
+.ast-edge-label-bg {
+  fill: #0d1117;
+  stroke: #30363d;
+  stroke-width: 1px;
+  rx: 3px;
+  ry: 3px;
+}
+
+.ast-edge-label-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  fill: #8b949e;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+/* Diagram Node Elements (Matching Reference Image) */
+.ast-diagram-node {
+  cursor: pointer;
+  transition: transform 0.1s ease, filter 0.15s ease;
+}
+
+.ast-diagram-node:hover .ast-node-box {
+  filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.2));
+  stroke-width: 2px;
+}
+
+.ast-diagram-node.active-selection .ast-node-box {
+  stroke: #ffffff !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 10px #58a6ff) !important;
+}
+
+.ast-node-box {
+  rx: 4px;
+  ry: 4px;
+  stroke-width: 1.5px;
+  transition: all 0.15s ease;
+}
+
+/* Category: Statements & Composite Blocks (Blue - Reference Match) */
+.node-statement .ast-node-box {
+  fill: #cfe2ff;
+  stroke: #3b77ba;
+}
+.node-statement .ast-node-text-title {
+  fill: #0c2b54;
+}
+.node-statement .ast-node-text-sub {
+  fill: #19447a;
+}
+
+/* Category: Variables & Identifiers (Green - Reference Match) */
+.node-variable .ast-node-box {
+  fill: #bbf0bb;
+  stroke: #2b8c2b;
+}
+.node-variable .ast-node-text-title {
+  fill: #0b3d0b;
+}
+.node-variable .ast-node-text-sub {
+  fill: #135213;
+}
+
+/* Category: Constants & Literals (Yellow - Reference Match) */
+.node-constant .ast-node-box {
+  fill: #fff3cd;
+  stroke: #cfb240;
+}
+.node-constant .ast-node-text-title {
+  fill: #544403;
+}
+.node-constant .ast-node-text-sub {
+  fill: #6e5904;
+}
+
+/* Category: Operations & Calls (Light Cyan / Blue-Green) */
+.node-operation .ast-node-box {
+  fill: #d0f0fd;
+  stroke: #2ca5c7;
+}
+.node-operation .ast-node-text-title {
+  fill: #0b4556;
+}
+.node-operation .ast-node-text-sub {
+  fill: #14596d;
+}
+
+/* Node Typography */
+.ast-node-text-title {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+.ast-node-text-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
 

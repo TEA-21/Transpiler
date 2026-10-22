@@ -31,9 +31,15 @@
        - Preset demonstration selector (Review 2 Full Pipeline, Bidirectional Functions, While Loops & Arrays, and 3 Negative Type Rejection tests).
        - Live transpilation toggle and `Ctrl+Enter` shortcut.
        - Bottom inspection drawers: Token stream with virtual `INDENT`/`DEDENT` tags, Scoped Symbol Table tree viewer, Type-Decorated AST, Raw AST, and Diagnostics Console.
-       - **Interactive Hierarchical AST Tree Visualization:** Added interactive collapsible AST tree view with depth-based expansion, node type badges, value/operator summaries, source location coordinates (`L:C`), and inferred type chips (`: number`, `: string`, etc.).
-       - **Editor Line Synchronization:** Added click-to-jump on AST nodes that highlights and scrolls to the exact source statement in the Mini-Python code editor.
-       - **Toolbar Controls:** Added Tree View vs Raw JSON dual-mode toggle and global `[Expand All]` / `[Collapse All]` actions for both Decorated and Raw AST tabs.
+       - **2D Graphical AST Tree Diagram (Node-Link Visualizer):** Added visual SVG tree diagram matching classic compiler tree specifications:
+         - Blue boxes for statements/blocks (`while`, `branch`, `assign`, `return`, `function`, `compare`, `statement sequence`).
+         - Green boxes for variables / identifiers (`variable name: x`).
+         - Yellow boxes for constants / literals (`constant value: n`).
+         - Connector lines with branch edge labels (`condition`, `body`, `if-body`, `else-body`, `target`, `value`, `left`, `right`).
+         - Collision-free tidy tree recursive layout algorithm.
+         - Interactive pan dragging, mouse wheel zoom, zoom controls (`+`, `−`, `Fit / Reset`).
+         - Click-to-jump on diagram nodes that highlights and scrolls to the exact source statement in the Mini-Python code editor.
+       - **Hierarchical Outline Tree & Raw JSON:** Retained secondary outline accordion tree and raw JSON views with a 3-way toggle (`[Diagram Tree]`, `[Outline Tree]`, `[JSON View]`).
        - Clean, industrial dark theme strictly free of blue/purple gradients or AI slop.
      - Added `"ui": "npx tsx src/ui/server.ts"` and `"demo:review2": "npx tsx src/demo_review2.ts"` to [`package.json`](file:///d:/Projects/Transpiler/package.json).
 

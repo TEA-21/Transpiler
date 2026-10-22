@@ -109,10 +109,23 @@ const decoratedAstJson = document.getElementById('decorated-ast-json');
 const rawAstJson = document.getElementById('raw-ast-json');
 const decoratedAstTree = document.getElementById('decorated-ast-tree');
 const rawAstTree = document.getElementById('raw-ast-tree');
+const decoratedAstDiagram = document.getElementById('decorated-ast-diagram');
+const rawAstDiagram = document.getElementById('raw-ast-diagram');
+
+const decoratedZoomIn = document.getElementById('decorated-zoom-in');
+const decoratedZoomOut = document.getElementById('decorated-zoom-out');
+const decoratedZoomReset = document.getElementById('decorated-zoom-reset');
+const rawZoomIn = document.getElementById('raw-zoom-in');
+const rawZoomOut = document.getElementById('raw-zoom-out');
+const rawZoomReset = document.getElementById('raw-zoom-reset');
+
 const decoratedExpandAll = document.getElementById('decorated-expand-all');
 const decoratedCollapseAll = document.getElementById('decorated-collapse-all');
 const rawExpandAll = document.getElementById('raw-expand-all');
 const rawCollapseAll = document.getElementById('raw-collapse-all');
+
+const decoratedDiagramState = { panX: 0, panY: 0, zoom: 1, isDragging: false, startX: 0, startY: 0, svgG: null, bbox: null };
+const rawDiagramState = { panX: 0, panY: 0, zoom: 1, isDragging: false, startX: 0, startY: 0, svgG: null, bbox: null };
 const diagnosticsContainer = document.getElementById('diagnostics-container');
 
 let debounceTimer = null;
@@ -172,6 +185,9 @@ async function executeTranspile() {
       decoratedAstJson.textContent = JSON.stringify(data.decoratedAst, null, 2);
       rawAstJson.textContent = JSON.stringify(data.rawAst, null, 2);
 
+      // Render ASTs (2D Diagrams & Outline Trees)
+      renderAstDiagram(data.decoratedAst, decoratedAstDiagram, true, decoratedDiagramState);
+      renderAstDiagram(data.rawAst, rawAstDiagram, false, rawDiagramState);
       renderAstTree(data.decoratedAst, decoratedAstTree, true);
       renderAstTree(data.rawAst, rawAstTree, false);
 
@@ -193,6 +209,8 @@ async function executeTranspile() {
       tsOutput.innerHTML = `<code style="color: var(--status-red);">/* Compilation Failed: [${data.errorType}] ${escapeHtml(data.message)} */</code>`;
       updateGutter('1', tsGutter);
 
+      if (decoratedAstDiagram) decoratedAstDiagram.innerHTML = '<div class="empty-state">Compilation failed. No AST available.</div>';
+      if (rawAstDiagram) rawAstDiagram.innerHTML = '<div class="empty-state">Compilation failed. No AST available.</div>';
       if (decoratedAstTree) decoratedAstTree.innerHTML = '<div class="empty-state">Compilation failed. No AST available.</div>';
       if (rawAstTree) rawAstTree.innerHTML = '<div class="empty-state">Compilation failed. No AST available.</div>';
 
@@ -633,7 +651,558 @@ function renderAstTree(ast, container, isDecorated) {
 }
 
 // --------------------------------------------------------------------------
-// AST Toolbar Handlers & View Toggles
+// 2D Graphical AST Tree Diagram (Node-Link Visualizer)
+// --------------------------------------------------------------------------
+
+const DIAGRAM_NODE_W = 104;
+const DIAGRAM_NODE_H = 46;
+const DIAGRAM_H_GAP = 22;
+const DIAGRAM_V_GAP = 52;
+const DIAGRAM_PAD = 40;
+
+function astToDiagramNode(node, edgeLabel = '', isDecorated = false) {
+  if (!node || typeof node !== 'object') {
+    return {
+      category: 'constant',
+      title: 'value',
+      subtitle: String(node),
+      edgeLabel,
+      children: [],
+    };
+  }
+
+  const loc = node.loc && node.loc.start ? node.loc.start : null;
+  const inferredType = isDecorated && node.inferredType ? `: ${node.inferredType}` : '';
+  const inferredRet = isDecorated && node.inferredReturnType ? `-> ${node.inferredReturnType}` : '';
+
+  switch (node.type) {
+    case 'Program': {
+      const children = (node.body || []).map((stmt, idx) =>
+        astToDiagramNode(stmt, node.body.length > 1 ? `stmt ${idx + 1}` : '', isDecorated)
+      );
+      return {
+        category: 'statement',
+        title: 'statement sequence',
+        subtitle: `${children.length} statements`,
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'VariableDeclaration': {
+      const children = [];
+      if (node.id) {
+        children.push(astToDiagramNode(node.id, 'target', isDecorated));
+      }
+      if (node.init) {
+        children.push(astToDiagramNode(node.init, 'value', isDecorated));
+      }
+      return {
+        category: 'statement',
+        title: 'assign',
+        subtitle: inferredType || (node.id ? `var ${node.id.name}` : ''),
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'FunctionDeclaration': {
+      const children = [];
+      if (node.params) {
+        node.params.forEach((param, i) => {
+          children.push(astToDiagramNode(param, `param ${i + 1}`, isDecorated));
+        });
+      }
+      if (node.body) {
+        children.push(astToDiagramNode(node.body, 'body', isDecorated));
+      }
+      return {
+        category: 'statement',
+        title: 'function',
+        subtitle: `${node.id ? node.id.name : 'fn'}()${inferredRet}`,
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'WhileStatement': {
+      const children = [];
+      if (node.test) {
+        children.push(astToDiagramNode(node.test, 'condition', isDecorated));
+      }
+      if (node.body) {
+        children.push(astToDiagramNode(node.body, 'body', isDecorated));
+      }
+      return {
+        category: 'statement',
+        title: 'while',
+        subtitle: 'loop',
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'IfStatement': {
+      const children = [];
+      if (node.test) {
+        children.push(astToDiagramNode(node.test, 'condition', isDecorated));
+      }
+      if (node.consequent) {
+        children.push(astToDiagramNode(node.consequent, 'if-body', isDecorated));
+      }
+      if (node.alternate) {
+        children.push(astToDiagramNode(node.alternate, 'else-body', isDecorated));
+      }
+      return {
+        category: 'statement',
+        title: 'branch',
+        subtitle: 'if / else',
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'BlockStatement': {
+      const stmts = node.body || [];
+      if (stmts.length === 1) {
+        return astToDiagramNode(stmts[0], edgeLabel, isDecorated);
+      }
+      return {
+        category: 'statement',
+        title: 'statement sequence',
+        subtitle: `${stmts.length} stmts`,
+        edgeLabel,
+        loc,
+        children: stmts.map((s, idx) => astToDiagramNode(s, `stmt ${idx + 1}`, isDecorated)),
+      };
+    }
+
+    case 'ReturnStatement': {
+      const children = [];
+      if (node.argument) {
+        children.push(astToDiagramNode(node.argument, 'value', isDecorated));
+      }
+      return {
+        category: 'statement',
+        title: 'return',
+        subtitle: inferredType || (node.argument ? '' : 'void'),
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'ExpressionStatement': {
+      return astToDiagramNode(node.expression, edgeLabel, isDecorated);
+    }
+
+    case 'BinaryExpression': {
+      const isCompare = ['==', '!=', '<', '<=', '>', '>='].includes(node.operator);
+      const isLogical = ['and', 'or'].includes(node.operator);
+      const category = isCompare ? 'statement' : (isLogical ? 'statement' : 'operation');
+      const title = isCompare ? 'compare' : (isLogical ? 'logical op' : 'bin op');
+
+      const children = [];
+      if (node.left) {
+        children.push(astToDiagramNode(node.left, 'left', isDecorated));
+      }
+      if (node.right) {
+        children.push(astToDiagramNode(node.right, 'right', isDecorated));
+      }
+      return {
+        category,
+        title,
+        subtitle: `op: ${node.operator}${inferredType ? ' ' + inferredType : ''}`,
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'UnaryExpression': {
+      const children = [];
+      if (node.argument) {
+        children.push(astToDiagramNode(node.argument, 'operand', isDecorated));
+      }
+      return {
+        category: 'operation',
+        title: 'unary op',
+        subtitle: `op: ${node.operator}`,
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'Identifier': {
+      return {
+        category: 'variable',
+        title: 'variable',
+        subtitle: `name: ${node.name}${inferredType ? ' ' + inferredType : ''}`,
+        edgeLabel,
+        loc,
+        children: [],
+      };
+    }
+
+    case 'Literal':
+    case 'NumericLiteral':
+    case 'StringLiteral':
+    case 'BooleanLiteral': {
+      let valStr = String(node.value !== undefined ? JSON.stringify(node.value) : (node.raw || ''));
+      if (valStr.length > 12) valStr = valStr.substring(0, 10) + '...';
+      return {
+        category: 'constant',
+        title: 'constant',
+        subtitle: `value: ${valStr}`,
+        edgeLabel,
+        loc,
+        children: [],
+      };
+    }
+
+    case 'CallExpression': {
+      const fnName = node.callee ? (node.callee.name || 'fn') : 'fn';
+      const children = [];
+      if (node.arguments) {
+        node.arguments.forEach((arg, i) => {
+          children.push(astToDiagramNode(arg, `arg ${i + 1}`, isDecorated));
+        });
+      }
+      return {
+        category: 'operation',
+        title: 'call',
+        subtitle: `${fnName}()${inferredType ? ' ' + inferredType : ''}`,
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'ArrayExpression': {
+      const children = (node.elements || []).map((el, i) =>
+        astToDiagramNode(el, `[${i}]`, isDecorated)
+      );
+      return {
+        category: 'constant',
+        title: 'array',
+        subtitle: `[${children.length} items]`,
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'SubscriptExpression': {
+      const children = [];
+      if (node.object) {
+        children.push(astToDiagramNode(node.object, 'target', isDecorated));
+      }
+      if (node.index) {
+        children.push(astToDiagramNode(node.index, 'index', isDecorated));
+      }
+      return {
+        category: 'operation',
+        title: 'subscript',
+        subtitle: `index lookup${inferredType ? ' ' + inferredType : ''}`,
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    default: {
+      return {
+        category: 'statement',
+        title: String(node.type || 'Node'),
+        subtitle: '',
+        edgeLabel,
+        loc,
+        children: [],
+      };
+    }
+  }
+}
+
+function computeDiagramSubtreeWidth(node) {
+  node.width = DIAGRAM_NODE_W;
+  node.height = DIAGRAM_NODE_H;
+
+  if (!node.children || node.children.length === 0) {
+    node.subtreeWidth = DIAGRAM_NODE_W;
+    return DIAGRAM_NODE_W;
+  }
+
+  let childrenWidth = 0;
+  for (let i = 0; i < node.children.length; i++) {
+    const childWidth = computeDiagramSubtreeWidth(node.children[i]);
+    childrenWidth += childWidth;
+    if (i > 0) childrenWidth += DIAGRAM_H_GAP;
+  }
+
+  node.subtreeWidth = Math.max(DIAGRAM_NODE_W, childrenWidth);
+  return node.subtreeWidth;
+}
+
+function assignDiagramPositions(node, leftX, topY) {
+  node.y = topY;
+
+  if (!node.children || node.children.length === 0) {
+    node.x = leftX + (node.subtreeWidth - DIAGRAM_NODE_W) / 2;
+    return;
+  }
+
+  let totalChildWidth = 0;
+  for (let i = 0; i < node.children.length; i++) {
+    totalChildWidth += node.children[i].subtreeWidth;
+    if (i > 0) totalChildWidth += DIAGRAM_H_GAP;
+  }
+
+  let currentX = leftX + (node.subtreeWidth - totalChildWidth) / 2;
+  const nextY = topY + DIAGRAM_NODE_H + DIAGRAM_V_GAP;
+
+  for (let i = 0; i < node.children.length; i++) {
+    const child = node.children[i];
+    assignDiagramPositions(child, currentX, nextY);
+    currentX += child.subtreeWidth + DIAGRAM_H_GAP;
+  }
+
+  const firstChild = node.children[0];
+  const lastChild = node.children[node.children.length - 1];
+  node.x = (firstChild.x + lastChild.x) / 2;
+}
+
+function collectDiagramElements(node, nodesList, edgesList) {
+  nodesList.push(node);
+  if (node.children) {
+    for (const child of node.children) {
+      edgesList.push({
+        parent: node,
+        child: child,
+        label: child.edgeLabel || '',
+      });
+      collectDiagramElements(child, nodesList, edgesList);
+    }
+  }
+}
+
+function renderAstDiagram(ast, container, isDecorated, state) {
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!ast) {
+    container.innerHTML = `<div class="empty-state">No ${isDecorated ? 'decorated' : 'raw'} AST generated yet.</div>`;
+    return;
+  }
+
+  const rootDiagram = astToDiagramNode(ast, '', isDecorated);
+  computeDiagramSubtreeWidth(rootDiagram);
+  assignDiagramPositions(rootDiagram, DIAGRAM_PAD, DIAGRAM_PAD);
+
+  const nodes = [];
+  const edges = [];
+  collectDiagramElements(rootDiagram, nodes, edges);
+
+  const totalWidth = rootDiagram.subtreeWidth + DIAGRAM_PAD * 2;
+  let maxDepthY = 0;
+  for (const n of nodes) {
+    if (n.y > maxDepthY) maxDepthY = n.y;
+  }
+  const totalHeight = maxDepthY + DIAGRAM_NODE_H + DIAGRAM_PAD * 2;
+
+  state.bbox = { width: totalWidth, height: totalHeight };
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'ast-diagram-svg');
+
+  const viewportG = document.createElementNS(svgNS, 'g');
+  viewportG.setAttribute('class', 'ast-diagram-viewport-g');
+  svg.appendChild(viewportG);
+  state.svgG = viewportG;
+
+  // Render edges
+  const edgesG = document.createElementNS(svgNS, 'g');
+  edgesG.setAttribute('class', 'ast-edges-group');
+  for (const edge of edges) {
+    const px = edge.parent.x + DIAGRAM_NODE_W / 2;
+    const py = edge.parent.y + DIAGRAM_NODE_H;
+    const cx = edge.child.x + DIAGRAM_NODE_W / 2;
+    const cy = edge.child.y;
+
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('class', 'ast-diagram-edge');
+    line.setAttribute('x1', String(px));
+    line.setAttribute('y1', String(py));
+    line.setAttribute('x2', String(cx));
+    line.setAttribute('y2', String(cy));
+    edgesG.appendChild(line);
+
+    if (edge.label) {
+      const midX = (px + cx) / 2;
+      const midY = (py + cy) / 2;
+      const labelW = Math.max(34, edge.label.length * 6.5 + 10);
+      const labelH = 16;
+
+      const labelG = document.createElementNS(svgNS, 'g');
+      labelG.setAttribute('class', 'ast-edge-label-group');
+
+      const bg = document.createElementNS(svgNS, 'rect');
+      bg.setAttribute('class', 'ast-edge-label-bg');
+      bg.setAttribute('x', String(midX - labelW / 2));
+      bg.setAttribute('y', String(midY - labelH / 2));
+      bg.setAttribute('width', String(labelW));
+      bg.setAttribute('height', String(labelH));
+
+      const text = document.createElementNS(svgNS, 'text');
+      text.setAttribute('class', 'ast-edge-label-text');
+      text.setAttribute('x', String(midX));
+      text.setAttribute('y', String(midY + 3));
+      text.textContent = edge.label;
+
+      labelG.appendChild(bg);
+      labelG.appendChild(text);
+      edgesG.appendChild(labelG);
+    }
+  }
+  viewportG.appendChild(edgesG);
+
+  // Render nodes
+  const nodesG = document.createElementNS(svgNS, 'g');
+  nodesG.setAttribute('class', 'ast-nodes-group');
+  for (const n of nodes) {
+    const nodeG = document.createElementNS(svgNS, 'g');
+    nodeG.setAttribute('class', `ast-diagram-node node-${n.category}`);
+    nodeG.setAttribute('transform', `translate(${n.x}, ${n.y})`);
+
+    const rect = document.createElementNS(svgNS, 'rect');
+    rect.setAttribute('class', 'ast-node-box');
+    rect.setAttribute('width', String(DIAGRAM_NODE_W));
+    rect.setAttribute('height', String(DIAGRAM_NODE_H));
+    nodeG.appendChild(rect);
+
+    const title = document.createElementNS(svgNS, 'text');
+    title.setAttribute('class', 'ast-node-text-title');
+    title.setAttribute('x', String(DIAGRAM_NODE_W / 2));
+    title.setAttribute('y', n.subtitle ? '17' : '24');
+    title.textContent = n.title;
+    nodeG.appendChild(title);
+
+    if (n.subtitle) {
+      const sub = document.createElementNS(svgNS, 'text');
+      sub.setAttribute('class', 'ast-node-text-sub');
+      sub.setAttribute('x', String(DIAGRAM_NODE_W / 2));
+      sub.setAttribute('y', '32');
+      sub.textContent = n.subtitle;
+      nodeG.appendChild(sub);
+    }
+
+    // Node click to jump to line in Python editor
+    nodeG.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document
+        .querySelectorAll('.ast-diagram-node.active-selection')
+        .forEach((el) => el.classList.remove('active-selection'));
+      nodeG.classList.add('active-selection');
+
+      if (n.loc) {
+        jumpToSourceLine(n.loc.line, n.loc.column);
+      }
+    });
+
+    nodesG.appendChild(nodeG);
+  }
+  viewportG.appendChild(nodesG);
+
+  container.appendChild(svg);
+
+  // Auto-fit initial zoom & center
+  fitDiagramToViewport(container, state);
+  applyDiagramTransform(state);
+
+  // Bind Pan & Zoom handlers
+  setupDiagramInteractions(container, state);
+}
+
+function fitDiagramToViewport(container, state) {
+  if (!state || !state.bbox) return;
+  const cw = container.clientWidth || 800;
+  const ch = container.clientHeight || 280;
+
+  const scaleX = (cw - 40) / state.bbox.width;
+  const scaleY = (ch - 40) / state.bbox.height;
+  state.zoom = Math.min(1.0, Math.max(0.2, Math.min(scaleX, scaleY)));
+
+  state.panX = Math.max(20, (cw - state.bbox.width * state.zoom) / 2);
+  state.panY = 20;
+}
+
+function applyDiagramTransform(state) {
+  if (state && state.svgG) {
+    state.svgG.setAttribute(
+      'transform',
+      `translate(${state.panX}, ${state.panY}) scale(${state.zoom})`
+    );
+  }
+}
+
+function zoomDiagram(state, delta) {
+  if (!state) return;
+  const newZoom = Math.min(2.5, Math.max(0.15, state.zoom * delta));
+  state.zoom = newZoom;
+  applyDiagramTransform(state);
+}
+
+function setupDiagramInteractions(container, state) {
+  if (container._hasInteractions) return;
+  container._hasInteractions = true;
+
+  container.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    state.isDragging = true;
+    state.startX = e.clientX - state.panX;
+    state.startY = e.clientY - state.panY;
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!state.isDragging) return;
+    state.panX = e.clientX - state.startX;
+    state.panY = e.clientY - state.startY;
+    applyDiagramTransform(state);
+  });
+
+  window.addEventListener('mouseup', () => {
+    state.isDragging = false;
+  });
+
+  container.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 0.87;
+      const newZoom = Math.min(2.5, Math.max(0.15, state.zoom * factor));
+
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      state.panX = mouseX - (mouseX - state.panX) * (newZoom / state.zoom);
+      state.panY = mouseY - (mouseY - state.panY) * (newZoom / state.zoom);
+      state.zoom = newZoom;
+
+      applyDiagramTransform(state);
+    },
+    { passive: false }
+  );
+}
+
+// --------------------------------------------------------------------------
+// AST Toolbar Handlers & View Toggles (Diagram / Tree / JSON)
 // --------------------------------------------------------------------------
 document.querySelectorAll('.btn-tool-toggle').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -645,21 +1214,65 @@ document.querySelectorAll('.btn-tool-toggle').forEach((btn) => {
     pane.querySelectorAll('.btn-tool-toggle').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
 
+    const diagramEl = pane.querySelector('.ast-diagram-viewport');
     const treeEl = pane.querySelector('.ast-tree-view');
     const jsonEl = pane.querySelector('.json-viewer');
-    const actionsEl = pane.querySelector('.ast-actions');
+    const isDecorated = paneId.includes('decorated');
+    const diagramActionsEl = document.getElementById(isDecorated ? 'decorated-diagram-actions' : 'raw-diagram-actions');
+    const treeActionsEl = document.getElementById(isDecorated ? 'decorated-tree-actions' : 'raw-tree-actions');
 
-    if (view === 'tree') {
+    if (view === 'diagram') {
+      if (diagramEl) diagramEl.style.display = 'block';
+      if (treeEl) treeEl.style.display = 'none';
+      if (jsonEl) jsonEl.style.display = 'none';
+      if (diagramActionsEl) diagramActionsEl.style.display = 'flex';
+      if (treeActionsEl) treeActionsEl.style.display = 'none';
+
+      const state = isDecorated ? decoratedDiagramState : rawDiagramState;
+      const container = isDecorated ? decoratedAstDiagram : rawAstDiagram;
+      fitDiagramToViewport(container, state);
+      applyDiagramTransform(state);
+    } else if (view === 'tree') {
+      if (diagramEl) diagramEl.style.display = 'none';
       if (treeEl) treeEl.style.display = 'block';
       if (jsonEl) jsonEl.style.display = 'none';
-      if (actionsEl) actionsEl.style.display = 'flex';
+      if (diagramActionsEl) diagramActionsEl.style.display = 'none';
+      if (treeActionsEl) treeActionsEl.style.display = 'flex';
     } else {
+      if (diagramEl) diagramEl.style.display = 'none';
       if (treeEl) treeEl.style.display = 'none';
       if (jsonEl) jsonEl.style.display = 'block';
-      if (actionsEl) actionsEl.style.display = 'none';
+      if (diagramActionsEl) diagramActionsEl.style.display = 'none';
+      if (treeActionsEl) treeActionsEl.style.display = 'none';
     }
   });
 });
+
+if (decoratedZoomIn) {
+  decoratedZoomIn.addEventListener('click', () => zoomDiagram(decoratedDiagramState, 1.25));
+}
+if (decoratedZoomOut) {
+  decoratedZoomOut.addEventListener('click', () => zoomDiagram(decoratedDiagramState, 0.8));
+}
+if (decoratedZoomReset) {
+  decoratedZoomReset.addEventListener('click', () => {
+    fitDiagramToViewport(decoratedAstDiagram, decoratedDiagramState);
+    applyDiagramTransform(decoratedDiagramState);
+  });
+}
+
+if (rawZoomIn) {
+  rawZoomIn.addEventListener('click', () => zoomDiagram(rawDiagramState, 1.25));
+}
+if (rawZoomOut) {
+  rawZoomOut.addEventListener('click', () => zoomDiagram(rawDiagramState, 0.8));
+}
+if (rawZoomReset) {
+  rawZoomReset.addEventListener('click', () => {
+    fitDiagramToViewport(rawAstDiagram, rawDiagramState);
+    applyDiagramTransform(rawDiagramState);
+  });
+}
 
 if (decoratedExpandAll) {
   decoratedExpandAll.addEventListener('click', () => expandAll(decoratedAstTree));

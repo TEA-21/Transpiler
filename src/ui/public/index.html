@@ -141,15 +141,26 @@
         <div id="tab-decorated-ast" class="tab-pane">
           <div class="ast-toolbar">
             <div class="ast-mode-group">
-              <button class="btn-tool-toggle active" data-pane="tab-decorated-ast" data-view="tree">Tree View</button>
+              <button class="btn-tool-toggle active" data-pane="tab-decorated-ast" data-view="diagram">Diagram Tree</button>
+              <button class="btn-tool-toggle" data-pane="tab-decorated-ast" data-view="tree">Outline Tree</button>
               <button class="btn-tool-toggle" data-pane="tab-decorated-ast" data-view="json">JSON View</button>
             </div>
-            <div class="ast-actions" id="decorated-tree-actions">
+            <div class="ast-actions" id="decorated-diagram-actions">
+              <button class="btn-tool" id="decorated-zoom-in" title="Zoom in">+</button>
+              <button class="btn-tool" id="decorated-zoom-out" title="Zoom out">−</button>
+              <button class="btn-tool" id="decorated-zoom-reset" title="Fit to view">Fit / Reset</button>
+            </div>
+            <div class="ast-actions" id="decorated-tree-actions" style="display: none;">
               <button class="btn-tool" id="decorated-expand-all" title="Expand all tree nodes">Expand All</button>
               <button class="btn-tool" id="decorated-collapse-all" title="Collapse all tree nodes">Collapse All</button>
             </div>
           </div>
-          <div id="decorated-ast-tree" class="ast-tree-view">
+          <!-- 2D Graphical Tree Diagram -->
+          <div id="decorated-ast-diagram" class="ast-diagram-viewport">
+            <div class="empty-state">No decorated AST generated yet.</div>
+          </div>
+          <!-- Hierarchical Outline Tree -->
+          <div id="decorated-ast-tree" class="ast-tree-view" style="display: none;">
             <div class="empty-state">No decorated AST generated yet.</div>
           </div>
           <pre id="decorated-ast-json" class="json-viewer" style="display: none;">No decorated AST generated yet.</pre>
@@ -159,15 +170,26 @@
         <div id="tab-raw-ast" class="tab-pane">
           <div class="ast-toolbar">
             <div class="ast-mode-group">
-              <button class="btn-tool-toggle active" data-pane="tab-raw-ast" data-view="tree">Tree View</button>
+              <button class="btn-tool-toggle active" data-pane="tab-raw-ast" data-view="diagram">Diagram Tree</button>
+              <button class="btn-tool-toggle" data-pane="tab-raw-ast" data-view="tree">Outline Tree</button>
               <button class="btn-tool-toggle" data-pane="tab-raw-ast" data-view="json">JSON View</button>
             </div>
-            <div class="ast-actions" id="raw-tree-actions">
+            <div class="ast-actions" id="raw-diagram-actions">
+              <button class="btn-tool" id="raw-zoom-in" title="Zoom in">+</button>
+              <button class="btn-tool" id="raw-zoom-out" title="Zoom out">−</button>
+              <button class="btn-tool" id="raw-zoom-reset" title="Fit to view">Fit / Reset</button>
+            </div>
+            <div class="ast-actions" id="raw-tree-actions" style="display: none;">
               <button class="btn-tool" id="raw-expand-all" title="Expand all tree nodes">Expand All</button>
               <button class="btn-tool" id="raw-collapse-all" title="Collapse all tree nodes">Collapse All</button>
             </div>
           </div>
-          <div id="raw-ast-tree" class="ast-tree-view">
+          <!-- 2D Graphical Tree Diagram -->
+          <div id="raw-ast-diagram" class="ast-diagram-viewport">
+            <div class="empty-state">No raw AST generated yet.</div>
+          </div>
+          <!-- Hierarchical Outline Tree -->
+          <div id="raw-ast-tree" class="ast-tree-view" style="display: none;">
             <div class="empty-state">No raw AST generated yet.</div>
           </div>
           <pre id="raw-ast-json" class="json-viewer" style="display: none;">No raw AST generated yet.</pre>
