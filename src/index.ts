@@ -9,7 +9,7 @@ import { Parser } from './parser/parser.js';
 import { Program } from './parser/ast.js';
 import { SemanticAnalyzer } from './semantics/analyzer.js';
 import { Scope } from './semantics/symbolTable.js';
-import { emitTypeScript } from './codegen/emitter.js';
+import { emitTypeScript, EmitterOptions } from './codegen/emitter.js';
 
 export function parseMiniPython(source: string): Program {
   const lexer = new Lexer(source);
@@ -24,12 +24,15 @@ export function analyzeMiniPython(source: string): { rootScope: Scope; program: 
   return analyzer.analyze(ast);
 }
 
-export function transpileMiniPython(source: string): {
+export function transpileMiniPython(
+  source: string,
+  options?: EmitterOptions
+): {
   rootScope: Scope;
   program: Program;
   tsCode: string;
 } {
   const { rootScope, program } = analyzeMiniPython(source);
-  const tsCode = emitTypeScript(program);
+  const tsCode = emitTypeScript(program, options);
   return { rootScope, program, tsCode };
 }

@@ -1,74 +1,76 @@
-# Implementation Plan: AST Tree Visualization in Compiler Workbench UI
+# Final 100% Completion Plan: Flow-Sensitive Occurrence Typing & Strict Transpilation
 
-## 1. Context & User Alignment Summary
-Following the `/grill-me` alignment interview, the Workbench UI will be upgraded to include an interactive hierarchical tree visualization for Abstract Syntax Trees:
-- **Format:** An interactive collapsible tree component with a toolbar switch between **Tree View** and **JSON View**.
-- **Scope:** Supported on both the **Type-Decorated AST** and **Raw Untyped AST** inspector tabs.
-- **Node Information:** Node type badge, concise identifier/value/operator preview, source line/column coordinates (`L:C`), and inferred type badge (when present on decorated nodes).
-- **Expansion Behavior:** Automatically expand top 2 levels by default upon transpilation, with global `[Expand All]` and `[Collapse All]` toolbar actions.
-- **Editor Synchronization:** Clicking any AST node highlights and scrolls to the node's line in the Mini-Python code editor.
-- **Design Language:** Zero external dependencies, pure vanilla HTML/CSS/JS maintaining the industrial dark theme tokens.
+## 1. Project Goal & Research Spark Alignment
+Per user alignment and professor feedback:
+- **Core Research Spark:** Flow-Sensitive Occurrence Typing & Union Narrowing.
+  - Upgrade type engine from naive invariant rejection to full union type inference (`number | string`, `T | null`).
+  - Synthesize TypeScript type guards and branch narrowing via `isinstance(x, int|str|bool)` and `x is None` / `x is not None`.
+  - Disallow unsafe operations on un-narrowed unions while allowing seamless dynamic-to-static transition.
+- **100% Completion Deliverables:**
+  - Production CLI wrapper with POSIX arguments (`-o`, `--check`, `--emit-ast`, `--verify-tsc`, `--module`).
+  - Automated `tsc` Typecheck Verification pipeline in Vitest.
+  - Idiomatic module exports (`export` keyword emission).
+  - Workbench UI presets and visualization updates for Union types.
+  - Zero unrequested paper writing (code, tooling, and test focus only).
 
 ---
 
 ## 2. Architecture & File Breakdown
 
-### Files to Modify:
-1. `src/ui/public/index.html`:
-   - Upgrade the `#tab-decorated-ast` and `#tab-raw-ast` panes with toolbar controls:
-     - View mode toggle: `[Tree View]` (default active) vs `[JSON View]`.
-     - Tree action buttons: `[Expand All]`, `[Collapse All]`.
-   - Add containers for `#decorated-ast-tree` and `#raw-ast-tree` alongside the `<pre>` JSON views.
-2. `src/ui/public/style.css`:
-   - Define styles for:
-     - AST toolbar (`.ast-toolbar`, `.ast-view-toggle`, `.btn-tool`).
-     - Tree container and node hierarchy (`.ast-tree`, `.ast-node`, `.ast-node-header`, `.ast-node-children`).
-     - Visual tree indent guides (`.ast-node::before` / tree line connectors).
-     - Chevron toggle arrows with rotate transitions.
-     - Node badges: `.ast-badge-type`, `.ast-badge-val`, `.ast-badge-loc`, `.ast-badge-inferred`.
-     - Node hover & active selection states.
-     - Highlighting synchronization in the editor container.
-3. `src/ui/public/app.js`:
-   - Implement `AstTreeRenderer`:
-     - Recursive AST node parsing and DOM creation.
-     - Summarization of key properties (`id`, `name`, `operator`, `value`, `inferredType`, `loc`).
-     - Expand/collapse toggle logic with depth-based initial expansion (depth <= 2 open).
-     - Global expand-all / collapse-all listeners.
-     - Node click handler that jumps to line in `pyInput` (setting `selectionStart`/`selectionEnd` and scrolling).
-   - Hook up `renderAstTree(data.decoratedAst, 'decorated')` and `renderAstTree(data.rawAst, 'raw')` in `executeTranspile()`.
-   - Wire up Tree/JSON mode toggle buttons.
-4. `PROGRESS.md`:
-   - Update with completed steps, modified files, and verified functionality.
+### Files to Modify / Create:
+1. **Lexer & Tokens:**
+   - `src/lexer/tokens.ts`: Add `KEYWORD_NONE`, `KEYWORD_IS`, token mappings.
+   - `src/lexer/lexer.ts`: Scan `None` and `is`.
+   - `tests/lexer.test.ts`: Add tokenization tests for `None`, `is`, `is not`.
+2. **AST & Parser:**
+   - `src/parser/ast.ts`: Add `NoneLiteral`, extend `BinaryOperator` with `'is'` and `'is not'`.
+   - `src/parser/parser.ts`: Parse `None` literals, `is` / `is not` expressions, and `isinstance()` calls.
+   - `tests/parser.test.ts`: Add parser tests for type checks and `None`.
+3. **Semantic Analysis & Occurrence Typing:**
+   - `src/semantics/types.ts`: Add `UnionType`, `NULL_TYPE`, `createUnionType`, union simplification, subtyping, and stringification.
+   - `src/semantics/unifier.ts`: Update unification to handle unions, subtyping, and typevar instantiation against unions.
+   - `src/semantics/symbolTable.ts`: Support symbol narrowing and type overrides in child scopes.
+   - `src/semantics/analyzer.ts`:
+     - Reassignment: calculate union type on reassignment, track current narrowed type.
+     - Flow-Sensitive Narrowing: analyze `isinstance(x, type)` and `x is not None` in `IfStatement` tests; narrow symbols in consequent and alternate branches.
+     - Enforce type safety: reject operations on un-narrowed unions with explanatory diagnostics.
+   - `tests/semantics.test.ts`: Add tests for union inference, `isinstance` narrowing, `None` optional returns, and invalid un-narrowed operations.
+4. **TypeScript Code Generation:**
+   - `src/codegen/emitter.ts`:
+     - Emit `null` for `None`.
+     - Emit `=== null` / `!== null` for `is None` / `is not None`.
+     - Emit `typeof x === 'number'` / `'string'` / `'boolean'` for `isinstance()`.
+     - Emit union type annotations (`number | string`, `T | null`).
+     - Support `moduleMode` option to emit `export` for top-level functions and constants.
+   - `tests/emitter.test.ts`: Test union type emission and type guard translation.
+5. **Production CLI Interface:**
+   - `src/cli.ts`: Standalone POSIX CLI parser supporting `-o`, `--check`, `--emit-ast`, `--module`, `--verify-tsc`, and piping.
+   - `package.json`: Register `"bin"` entry and npm scripts.
+6. **Automated `tsc` Verification Suite:**
+   - `tests/e2e_tsc.test.ts`: Run generated TypeScript code directly through the TypeScript compiler (`tsc --noEmit`) to verify 0 type errors.
+7. **Workbench UI Updates:**
+   - `src/ui/public/app.js` & `index.html`: Add preset for Union Types & Type Guards, display union badges in AST and symbol tables.
+8. **Progress Tracking:**
+   - `PROGRESS.md`: Record all completed steps and verification results.
 
 ---
 
-## 3. Detailed Execution Phases
+## 3. Step-by-Step Implementation Protocol
 
-### Phase 1: Structure & Markup (`index.html`)
-- Wrap `#tab-decorated-ast` and `#tab-raw-ast` with an `.ast-tab-header` containing:
-  - Mode toggle button group (`Tree View` / `Raw JSON`).
-  - Action buttons (`Expand All`, `Collapse All`).
-- Provide distinct tree container `div` and preserve the existing `<pre>` element for JSON mode.
+### Step 1: Lexer & Parser Extensions (`None`, `is`, `is not`, `isinstance`)
+- Verify: Lexer and parser test suites pass with new grammar features.
 
-### Phase 2: Styling & Tree Layout (`style.css`)
-- Style the toolbar controls, badges, and toggle buttons.
-- Build clean hierarchical tree styling with dotted/solid vertical guide lines.
-- Implement collapsible disclosure triangles that rotate on open/close.
-- Style type chips and value indicators with harmonious palette (`#64B5F6`, `#81C784`, `#BA68C8`, etc.).
+### Step 2: Semantic Union Types & Flow-Sensitive Occurrence Typing
+- Verify: Vitest semantic tests pass for union inference and branch narrowing.
 
-### Phase 3: Interactive Tree Logic & Editor Sync (`app.js`)
-- Construct recursive tree node builder:
-  - Detect node category (`Statement`, `Expression`, `Identifier`, `Literal`, etc.).
-  - Extract preview values (e.g. `BinaryExpression: '+'`, `Identifier: 'count'`, `Literal: 100`).
-  - Format source coordinates `loc.start.line:loc.start.column`.
-  - Filter out recursive metadata properties (`loc`) from cluttering child expansion, displaying only child AST nodes and child arrays.
-  - Initial open state: auto-expanded for depth <= 2.
-- Implement toolbar toggle actions (Tree vs JSON).
-- Implement global Expand All / Collapse All.
-- Implement Python editor jump-to-line on node click.
+### Step 3: TypeScript Emitter & Module Exports
+- Verify: Emitter tests pass for `typeof` guards, null checks, and union type signatures.
 
-### Phase 4: Verification & Quality Assurance
-- Run automated unit test suite (`npm test`) to guarantee zero regression on compiler pipeline.
-- Verify transpiler server and UI serving (`node/tsx`).
-- Test various AST inputs (Review 2 Demo, functions, arrays, conditionals) in the workbench.
-- Update `PROGRESS.md` with execution log.
+### Step 4: Production CLI Implementation (`src/cli.ts`)
+- Verify: CLI transpiles files from terminal and validates arguments.
+
+### Step 5: Automated End-to-End `tsc` Verification Suite
+- Verify: Real `tsc` compiler confirms 0 type errors on all generated test files.
+
+### Step 6: Workbench UI Presets & Live Verification
+- Verify: UI displays new presets and visualizes union types cleanly.

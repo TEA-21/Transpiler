@@ -1,4 +1,4 @@
-import { prune, Type, typeToString, TypeVar } from './types.js';
+import { createUnionType, prune, Type, typesAreEqual, typeToString, TypeVar, unionIncludes } from './types.js';
 
 export class UnificationError extends Error {
   constructor(message: string) {
@@ -21,7 +21,12 @@ export function unify(t1: Type, t2: Type): void {
         `Recursive type constraint detected (${p1.id} in ${typeToString(p2)})`
       );
     }
-    p1.instance = p2;
+    if (p1.guardedTypes && p1.guardedTypes.length > 0) {
+      p1.instance = createUnionType([...p1.guardedTypes, p2]);
+      p1.instance.guardedTypes = p1.guardedTypes;
+    } else {
+      p1.instance = p2;
+    }
     return;
   }
 
@@ -31,7 +36,12 @@ export function unify(t1: Type, t2: Type): void {
         `Recursive type constraint detected (${p2.id} in ${typeToString(p1)})`
       );
     }
-    p2.instance = p1;
+    if (p2.guardedTypes && p2.guardedTypes.length > 0) {
+      p2.instance = createUnionType([...p2.guardedTypes, p1]);
+      p2.instance.guardedTypes = p2.guardedTypes;
+    } else {
+      p2.instance = p1;
+    }
     return;
   }
 
@@ -66,6 +76,20 @@ export function unify(t1: Type, t2: Type): void {
     return;
   }
 
+  if (p1.kind === 'union' && p2.kind === 'union') {
+    if (typesAreEqual(p1, p2)) {
+      return;
+    }
+  }
+
+  if (p1.kind === 'union' && unionIncludes(p1, p2)) {
+    return;
+  }
+
+  if (p2.kind === 'union' && unionIncludes(p2, p1)) {
+    return;
+  }
+
   throw new UnificationError(
     `Cannot unify incompatible types '${typeToString(p1)}' and '${typeToString(p2)}'`
   );
@@ -84,6 +108,9 @@ function occursInType(v: TypeVar, t: Type): boolean {
       pruned.paramTypes.some((p) => occursInType(v, p)) ||
       occursInType(v, pruned.returnType)
     );
+  }
+  if (pruned.kind === 'union') {
+    return pruned.types.some((u) => occursInType(v, u));
   }
   return false;
 }

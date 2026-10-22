@@ -25,14 +25,18 @@ import {
   createArrayType,
   createFunctionType,
   createTypeVar,
+  createUnionType,
   FunctionType,
+  NULL_TYPE,
   NUMBER_TYPE,
   prune,
   resetTypeVarCounter,
   STRING_TYPE,
   Type,
+  typesAreEqual,
   typeToString,
   TypeVar,
+  unionSubtract,
   VOID_TYPE,
 } from './types.js';
 import { unify } from './unifier.js';
@@ -130,30 +134,134 @@ export class SemanticAnalyzer {
     const existing = this.currentScope.resolve(stmt.id.name);
 
     if (existing) {
-      // Reassignment: enforce static invariant type
+      // Reassignment:
+      // Try unifying. If incompatible, widen existing.type to a UnionType!
       try {
         unify(existing.type, initType);
       } catch {
-        throw new TypeError(
-          `Conflicting reassignment: variable '${stmt.id.name}' of static type '${typeToString(
-            existing.type
-          )}' cannot be reassigned with value of type '${typeToString(initType)}'`,
-          stmt.id.loc.start
-        );
+        existing.type = createUnionType([existing.type, initType]);
       }
       existing.isMutable = true;
+      existing.currentType = initType;
+      if (existing.declarationNode) {
+        existing.declarationNode.isConst = false;
+        existing.declarationNode.inferredType = typeToString(prune(existing.type));
+      }
+      stmt.isConst = false;
       stmt.inferredType = typeToString(prune(existing.type));
     } else {
       // Initial declaration in current scope
+      stmt.isConst = true;
       this.currentScope.define({
         name: stmt.id.name,
         kind: 'variable',
         type: initType,
+        currentType: initType,
         loc: stmt.id.loc,
         isMutable: false,
+        declarationNode: stmt,
       });
       stmt.inferredType = typeToString(prune(initType));
     }
+  }
+
+  private extractTypeGuard(
+    test: Expression
+  ): { targetName: string; narrowedConsequent: Type; narrowedAlternate?: Type } | null {
+    if (test.type === 'CallExpression') {
+      if (
+        test.callee.type === 'Identifier' &&
+        test.callee.name === 'isinstance' &&
+        test.arguments.length === 2 &&
+        test.arguments[0]?.type === 'Identifier' &&
+        test.arguments[1]?.type === 'Identifier'
+      ) {
+        const targetName = test.arguments[0].name;
+        const typeName = test.arguments[1].name;
+        let targetType: Type | null = null;
+        if (typeName === 'int') targetType = NUMBER_TYPE;
+        else if (typeName === 'str') targetType = STRING_TYPE;
+        else if (typeName === 'bool') targetType = BOOLEAN_TYPE;
+
+        if (targetType) {
+          const sym = this.currentScope.resolve(targetName);
+          if (sym) {
+            const pSym = prune(sym.type);
+            if (pSym.kind === 'typevar') {
+              pSym.guardedTypes = pSym.guardedTypes ?? [];
+              pSym.guardedTypes.push(targetType);
+            }
+          }
+          const currentType = sym ? (sym.currentType ?? sym.type) : targetType;
+          return {
+            targetName,
+            narrowedConsequent: targetType,
+            narrowedAlternate: unionSubtract(currentType, targetType),
+          };
+        }
+      }
+    }
+
+    if (test.type === 'BinaryExpression') {
+      if (test.operator === 'is not') {
+        if (test.left.type === 'Identifier' && test.right.type === 'NoneLiteral') {
+          const targetName = test.left.name;
+          const sym = this.currentScope.resolve(targetName);
+          const currentType = sym ? sym.type : NULL_TYPE;
+          return {
+            targetName,
+            narrowedConsequent: unionSubtract(currentType, NULL_TYPE),
+            narrowedAlternate: NULL_TYPE,
+          };
+        }
+        if (test.right.type === 'Identifier' && test.left.type === 'NoneLiteral') {
+          const targetName = test.right.name;
+          const sym = this.currentScope.resolve(targetName);
+          const currentType = sym ? sym.type : NULL_TYPE;
+          return {
+            targetName,
+            narrowedConsequent: unionSubtract(currentType, NULL_TYPE),
+            narrowedAlternate: NULL_TYPE,
+          };
+        }
+      }
+
+      if (test.operator === 'is') {
+        if (test.left.type === 'Identifier' && test.right.type === 'NoneLiteral') {
+          const targetName = test.left.name;
+          const sym = this.currentScope.resolve(targetName);
+          const currentType = sym ? sym.type : NULL_TYPE;
+          return {
+            targetName,
+            narrowedConsequent: NULL_TYPE,
+            narrowedAlternate: unionSubtract(currentType, NULL_TYPE),
+          };
+        }
+        if (test.right.type === 'Identifier' && test.left.type === 'NoneLiteral') {
+          const targetName = test.right.name;
+          const sym = this.currentScope.resolve(targetName);
+          const currentType = sym ? sym.type : NULL_TYPE;
+          return {
+            targetName,
+            narrowedConsequent: NULL_TYPE,
+            narrowedAlternate: unionSubtract(currentType, NULL_TYPE),
+          };
+        }
+      }
+    }
+
+    if (test.type === 'UnaryExpression' && test.operator === 'not') {
+      const inner = this.extractTypeGuard(test.argument);
+      if (inner) {
+        return {
+          targetName: inner.targetName,
+          narrowedConsequent: inner.narrowedAlternate ?? inner.narrowedConsequent,
+          narrowedAlternate: inner.narrowedConsequent,
+        };
+      }
+    }
+
+    return null;
   }
 
   private analyzeIfStatement(stmt: IfStatement): void {
@@ -169,8 +277,13 @@ export class SemanticAnalyzer {
       );
     }
 
+    const guard = this.extractTypeGuard(stmt.test);
+
     const previousScope = this.currentScope;
     const consequentScope = this.currentScope.createChildScope('block:if_consequent', 'block');
+    if (guard) {
+      consequentScope.narrow(guard.targetName, guard.narrowedConsequent);
+    }
     this.currentScope = consequentScope;
     this.analyzeBlockStatement(stmt.consequent);
     this.currentScope = previousScope;
@@ -180,6 +293,9 @@ export class SemanticAnalyzer {
         this.analyzeIfStatement(stmt.alternate);
       } else {
         const altScope = this.currentScope.createChildScope('block:if_alternate', 'block');
+        if (guard && guard.narrowedAlternate) {
+          altScope.narrow(guard.targetName, guard.narrowedAlternate);
+        }
         this.currentScope = altScope;
         this.analyzeBlockStatement(stmt.alternate);
         this.currentScope = previousScope;
@@ -204,6 +320,10 @@ export class SemanticAnalyzer {
     const loopScope = this.currentScope.createChildScope('loop:while', 'loop');
     this.currentScope = loopScope;
     this.analyzeBlockStatement(stmt.body);
+
+    // Verify loop condition invariant holds at back-edge
+    this.inferExpression(stmt.test);
+
     this.currentScope = previousScope;
   }
 
@@ -275,23 +395,27 @@ export class SemanticAnalyzer {
       try {
         unify(this.currentFunction.returnType, returnExprType);
       } catch {
-        throw new TypeError(
-          `Incompatible return type: expected '${typeToString(
-            this.currentFunction.returnType
-          )}', found '${typeToString(returnExprType)}'`,
-          stmt.argument.loc.start
-        );
+        this.currentFunction.returnType = createUnionType([
+          this.currentFunction.returnType,
+          returnExprType,
+        ]);
+        const fnType = this.functionTypes.get(this.currentFunction.name);
+        if (fnType) {
+          fnType.returnType = this.currentFunction.returnType;
+        }
       }
     } else {
       try {
         unify(this.currentFunction.returnType, VOID_TYPE);
       } catch {
-        throw new TypeError(
-          `Empty return statement in function expecting type '${typeToString(
-            this.currentFunction.returnType
-          )}'`,
-          stmt.loc.start
-        );
+        this.currentFunction.returnType = createUnionType([
+          this.currentFunction.returnType,
+          VOID_TYPE,
+        ]);
+        const fnType = this.functionTypes.get(this.currentFunction.name);
+        if (fnType) {
+          fnType.returnType = this.currentFunction.returnType;
+        }
       }
     }
   }
@@ -312,6 +436,8 @@ export class SemanticAnalyzer {
         return STRING_TYPE;
       case 'BooleanLiteral':
         return BOOLEAN_TYPE;
+      case 'NoneLiteral':
+        return NULL_TYPE;
       case 'Identifier':
         return this.inferIdentifier(expr);
       case 'ArrayLiteral':
@@ -332,7 +458,7 @@ export class SemanticAnalyzer {
     if (!symbol) {
       throw new SemanticError(`Undefined identifier '${expr.name}'`, expr.loc.start);
     }
-    return symbol.type;
+    return symbol.currentType ?? symbol.type;
   }
 
   private inferArrayLiteral(expr: ArrayLiteral): Type {
@@ -364,6 +490,13 @@ export class SemanticAnalyzer {
   private inferIndexExpression(expr: IndexExpression): Type {
     const objectType = prune(this.inferExpression(expr.object));
     const indexType = prune(this.inferExpression(expr.index));
+
+    if (objectType.kind === 'union') {
+      throw new TypeError(
+        `Cannot index into union type '${typeToString(objectType)}'. Narrow the type using isinstance() first.`,
+        expr.object.loc.start
+      );
+    }
 
     try {
       unify(indexType, NUMBER_TYPE);
@@ -403,6 +536,15 @@ export class SemanticAnalyzer {
       return VOID_TYPE;
     }
 
+    // Special handling for built-in isinstance
+    if (expr.callee.type === 'Identifier' && expr.callee.name === 'isinstance') {
+      if (expr.arguments.length !== 2) {
+        throw new TypeError('isinstance() takes exactly 2 arguments', expr.loc.start);
+      }
+      this.inferExpression(expr.arguments[0]!);
+      return BOOLEAN_TYPE;
+    }
+
     const calleeType = prune(this.inferExpression(expr.callee));
 
     if (calleeType.kind === 'typevar') {
@@ -437,6 +579,26 @@ export class SemanticAnalyzer {
       try {
         unify(paramType, argType);
       } catch {
+        const pParam = prune(paramType);
+        if (pParam.guardedTypes && pParam.guardedTypes.length > 0) {
+          const widened = createUnionType([pParam, argType]);
+          widened.guardedTypes = pParam.guardedTypes;
+          calleeType.paramTypes[i] = widened;
+          if (typesAreEqual(calleeType.returnType, pParam)) {
+            calleeType.returnType = widened;
+          }
+
+          const calleeIdent = expr.callee.type === 'Identifier' ? expr.callee.name : null;
+          const origFn = calleeIdent ? this.functionTypes.get(calleeIdent) : null;
+          if (origFn) {
+            origFn.paramTypes[i] = widened;
+            if (typesAreEqual(origFn.returnType, pParam)) {
+              origFn.returnType = widened;
+            }
+          }
+          continue;
+        }
+
         const calleeName =
           expr.callee.type === 'Identifier' ? expr.callee.name : 'function';
         throw new TypeError(
@@ -494,6 +656,16 @@ export class SemanticAnalyzer {
         const prunedL = prune(leftType);
         const prunedR = prune(rightType);
 
+        if (prunedL.kind === 'union' || prunedR.kind === 'union') {
+          const unionT = prunedL.kind === 'union' ? prunedL : prunedR;
+          throw new TypeError(
+            `Operator '+' cannot be applied to union type '${typeToString(
+              unionT
+            )}'. Narrow the type using isinstance() first.`,
+            expr.loc.start
+          );
+        }
+
         if (
           (prunedL.kind === 'primitive' && prunedL.name === 'string') ||
           (prunedR.kind === 'primitive' && prunedR.name === 'string')
@@ -530,6 +702,19 @@ export class SemanticAnalyzer {
       case '*':
       case '/':
       case '%': {
+        const prunedL = prune(leftType);
+        const prunedR = prune(rightType);
+
+        if (prunedL.kind === 'union' || prunedR.kind === 'union') {
+          const unionT = prunedL.kind === 'union' ? prunedL : prunedR;
+          throw new TypeError(
+            `Binary operator '${expr.operator}' cannot be applied to union type '${typeToString(
+              unionT
+            )}'. Narrow the type using isinstance() first.`,
+            expr.loc.start
+          );
+        }
+
         try {
           unify(leftType, NUMBER_TYPE);
           unify(rightType, NUMBER_TYPE);
@@ -548,6 +733,19 @@ export class SemanticAnalyzer {
       case '<=':
       case '>':
       case '>=': {
+        const prunedL = prune(leftType);
+        const prunedR = prune(rightType);
+
+        if (prunedL.kind === 'union' || prunedR.kind === 'union') {
+          const unionT = prunedL.kind === 'union' ? prunedL : prunedR;
+          throw new TypeError(
+            `Comparison operator '${expr.operator}' cannot be applied to union type '${typeToString(
+              unionT
+            )}'. Narrow the type using isinstance() first.`,
+            expr.loc.start
+          );
+        }
+
         try {
           unify(leftType, NUMBER_TYPE);
           unify(rightType, NUMBER_TYPE);
@@ -577,6 +775,11 @@ export class SemanticAnalyzer {
         return BOOLEAN_TYPE;
       }
 
+      case 'is':
+      case 'is not': {
+        return BOOLEAN_TYPE;
+      }
+
       case 'and':
       case 'or': {
         try {
@@ -598,16 +801,48 @@ export class SemanticAnalyzer {
   // --- Pass 3: AST Decoration ---
 
   private decorateProgram(program: Program): void {
+    this.finalizeScopeSymbols(this.rootScope);
+
     for (const stmt of program.body) {
       this.decorateStatement(stmt);
     }
+  }
+
+  private finalizeScopeSymbols(scope: Scope): void {
+    const prevScope = this.currentScope;
+    this.currentScope = scope;
+
+    for (const [, sym] of scope.getAllSymbols()) {
+      if (sym.kind === 'variable' && sym.declarationNode) {
+        if (sym.declarationNode.init) {
+          try {
+            const finalInitType = prune(this.inferExpression(sym.declarationNode.init));
+            if (sym.isMutable) {
+              sym.type = createUnionType([sym.type, finalInitType]);
+            } else {
+              sym.type = finalInitType;
+            }
+          } catch {
+            // Retain existing type on error
+          }
+        }
+        sym.declarationNode.inferredType = typeToString(prune(sym.type));
+        sym.declarationNode.isConst = !sym.isMutable;
+      }
+    }
+    for (const child of scope.children) {
+      this.finalizeScopeSymbols(child);
+    }
+
+    this.currentScope = prevScope;
   }
 
   private decorateStatement(stmt: Statement): void {
     if (stmt.type === 'VariableDeclaration') {
       const sym = this.rootScope.resolve(stmt.id.name);
       if (sym) {
-        stmt.inferredType = typeToString(sym.type);
+        stmt.inferredType = typeToString(prune(sym.type));
+        stmt.isConst = !sym.isMutable;
       }
     } else if (stmt.type === 'FunctionDeclaration') {
       const fnType = this.functionTypes.get(stmt.id.name);

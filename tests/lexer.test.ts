@@ -241,4 +241,15 @@ describe('Lexer', () => {
     expect(tokens[2]?.type).toBe(TokenType.STRING);
     expect(tokens[2]?.value).toBe('hello\nworld "escaped"');
   });
+
+  it('scans None, is, and is not keywords correctly', () => {
+    const input = 'val = None\ncheck = val is None\nnot_check = val is not None';
+    const lexer = new Lexer(input);
+    const tokens = lexer.tokenize();
+
+    const types = tokens.map((t) => t.type);
+    expect(types).toContain(TokenType.KEYWORD_NONE);
+    expect(types).toContain(TokenType.KEYWORD_IS);
+    expect(types).toContain(TokenType.KEYWORD_NOT);
+  });
 });

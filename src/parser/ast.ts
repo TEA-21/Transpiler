@@ -24,6 +24,7 @@ export interface VariableDeclaration extends BaseNode {
   id: Identifier;
   init: Expression;
   inferredType?: string;
+  isConst?: boolean;
 }
 
 export interface IfStatement extends BaseNode {
@@ -76,7 +77,9 @@ export type BinaryOperator =
   | '>'
   | '>='
   | 'and'
-  | 'or';
+  | 'or'
+  | 'is'
+  | 'is not';
 
 export interface BinaryExpression extends BaseNode {
   type: 'BinaryExpression';
@@ -116,7 +119,13 @@ export interface BooleanLiteral extends BaseNode {
   raw: string;
 }
 
-export type Literal = NumericLiteral | StringLiteral | BooleanLiteral;
+export interface NoneLiteral extends BaseNode {
+  type: 'NoneLiteral';
+  value: null;
+  raw: string;
+}
+
+export type Literal = NumericLiteral | StringLiteral | BooleanLiteral | NoneLiteral;
 
 export interface ArrayLiteral extends BaseNode {
   type: 'ArrayLiteral';

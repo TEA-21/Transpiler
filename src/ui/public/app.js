@@ -61,13 +61,58 @@ while i < 5:
 average = total / 5
 print(average)`,
 
-  error_reassign: `# [Negative Diagnostic Demo] Conflicting Static Type Reassignment
-# Variables maintain static invariant types.
-# Reassignment to a different type is rejected at compile time.
+  occurrence_typing: `# Flow-Sensitive Occurrence Typing & Type Guards (Research Spark)
+# The compiler infers union types (number | string) and narrows types inside branches.
 
-count = 10
-count = count + 1
-count = "This String Assignment Will Fail Compile-Time Type Safety"`,
+def format_data(value):
+    if isinstance(value, int):
+        return value * 10
+    else:
+        return value + " [Verified String]"
+
+num_out = format_data(42)
+str_out = format_data("compiler_token")
+
+print(num_out)
+print(str_out)`,
+
+  optional_null: `# Nullable Types & None Checking (Optional Pattern)
+# Functions returning None or a value infer T | null with branch narrowing.
+
+def find_user_score(user_id):
+    if user_id > 100:
+        return user_id * 2
+    return None
+
+score = find_user_score(150)
+
+if score is not None:
+    print("User Score: ")
+    print(score + 10)
+else:
+    print("User Not Found")`,
+
+  module_mode: `# Module Mode (--module): Export Declarations
+# Top-level constants and functions are emitted with TypeScript export keywords.
+
+tax_rate = 0.18
+api_version = "v2.1"
+
+def calculate_total(subtotal):
+    tax = subtotal * tax_rate
+    return subtotal + tax`,
+
+  error_unnarrowed: `# [Negative Diagnostic Demo] Unsafe Operation on Un-narrowed Union
+# Operating on a variable with multiple types without narrowing throws a compile-time error.
+
+def get_status(code):
+    if code == 200:
+        return 100
+    return "Error"
+
+raw_val = get_status(200)
+# Fails because raw_val has type 'number | string' and must be narrowed via isinstance() first!
+bad = raw_val + 5`,
 
   error_arithmetic: `# [Negative Diagnostic Demo] Illegal String Arithmetic
 # Arithmetic operations requires numeric operands.
@@ -92,6 +137,7 @@ const tsOutput = document.getElementById('ts-output');
 const tsGutter = document.getElementById('ts-gutter');
 const transpileBtn = document.getElementById('transpile-btn');
 const liveToggle = document.getElementById('live-toggle');
+const moduleToggle = document.getElementById('module-toggle');
 const presetSelect = document.getElementById('preset-select');
 const clearBtn = document.getElementById('clear-btn');
 const copyBtn = document.getElementById('copy-btn');
@@ -164,7 +210,10 @@ async function executeTranspile() {
     const res = await fetch('/api/transpile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source }),
+      body: JSON.stringify({
+        source,
+        moduleMode: moduleToggle ? moduleToggle.checked : false,
+      }),
     });
 
     const data = await res.json();
@@ -286,11 +335,21 @@ function showToast(msg) {
 // Preset selection
 presetSelect.addEventListener('change', (e) => {
   const key = e.target.value;
+  if (moduleToggle) {
+    moduleToggle.checked = (key === 'module_mode');
+  }
   if (PRESETS[key]) {
     pyInput.value = PRESETS[key];
     executeTranspile();
   }
 });
+
+// Module toggle switch
+if (moduleToggle) {
+  moduleToggle.addEventListener('change', () => {
+    executeTranspile();
+  });
+}
 
 // Input handling (live transpile debounce)
 pyInput.addEventListener('input', () => {

@@ -12,6 +12,7 @@ import {
   Identifier,
   IfStatement,
   IndexExpression,
+  NoneLiteral,
   NumericLiteral,
   Program,
   ReturnStatement,
@@ -289,26 +290,43 @@ export class Parser {
   private parseComparison(): Expression {
     let expr = this.parseAdditive();
 
-    while (
-      this.match(
-        TokenType.EQ,
-        TokenType.NEQ,
-        TokenType.LT,
-        TokenType.LTE,
-        TokenType.GT,
-        TokenType.GTE
-      )
-    ) {
-      const opToken = this.previous();
-      const op = opToken.value as BinaryOperator;
-      const right = this.parseAdditive();
-      expr = {
-        type: 'BinaryExpression',
-        operator: op,
-        left: expr,
-        right,
-        loc: { start: expr.loc.start, end: right.loc.end },
-      };
+    while (true) {
+      if (
+        this.match(
+          TokenType.EQ,
+          TokenType.NEQ,
+          TokenType.LT,
+          TokenType.LTE,
+          TokenType.GT,
+          TokenType.GTE
+        )
+      ) {
+        const opToken = this.previous();
+        const op = opToken.value as BinaryOperator;
+        const right = this.parseAdditive();
+        expr = {
+          type: 'BinaryExpression',
+          operator: op,
+          left: expr,
+          right,
+          loc: { start: expr.loc.start, end: right.loc.end },
+        };
+      } else if (this.match(TokenType.KEYWORD_IS)) {
+        let op: BinaryOperator = 'is';
+        if (this.match(TokenType.KEYWORD_NOT)) {
+          op = 'is not';
+        }
+        const right = this.parseAdditive();
+        expr = {
+          type: 'BinaryExpression',
+          operator: op,
+          left: expr,
+          right,
+          loc: { start: expr.loc.start, end: right.loc.end },
+        };
+      } else {
+        break;
+      }
     }
 
     return expr;
@@ -402,6 +420,16 @@ export class Parser {
         loc: boolToken.loc,
       };
       expr = boolVal;
+    } else if (this.match(TokenType.KEYWORD_NONE)) {
+      // None Literal
+      const noneToken = this.previous();
+      const noneVal: NoneLiteral = {
+        type: 'NoneLiteral',
+        value: null,
+        raw: noneToken.raw,
+        loc: noneToken.loc,
+      };
+      expr = noneVal;
     } else if (this.match(TokenType.IDENTIFIER, TokenType.KEYWORD_PRINT)) {
       // Identifier (or print)
       const idToken = this.previous();

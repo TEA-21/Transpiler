@@ -23,12 +23,23 @@
           <label for="preset-select" class="control-label">Preset:</label>
           <select id="preset-select" class="dropdown">
             <option value="review2">Review 2 Demo Pipeline (Full)</option>
+            <option value="occurrence_typing">Occurrence Typing & Type Guards (Research Spark)</option>
+            <option value="optional_null">Nullable Types & None Checks</option>
+            <option value="module_mode">Module Exports (--module)</option>
             <option value="bidirectional">Bidirectional Function Inference</option>
             <option value="arrays_loops">While Loops & Homogeneous Arrays</option>
-            <option value="error_reassign">[Negative] Conflicting Reassignment</option>
+            <option value="error_unnarrowed">[Negative] Un-narrowed Union Arithmetic</option>
             <option value="error_arithmetic">[Negative] Illegal String Arithmetic</option>
             <option value="error_guard">[Negative] Non-Boolean Guard Expression</option>
           </select>
+        </div>
+
+        <div class="toggle-wrapper">
+          <label class="switch" title="Emit module export keywords">
+            <input type="checkbox" id="module-toggle">
+            <span class="slider"></span>
+          </label>
+          <span class="toggle-label">Module Mode</span>
         </div>
 
         <div class="toggle-wrapper">

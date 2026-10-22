@@ -1,33 +1,44 @@
-export type PrimitiveTypeKind = 'number' | 'string' | 'boolean' | 'void';
+export type PrimitiveTypeKind = 'number' | 'string' | 'boolean' | 'void' | 'null';
 
 export interface PrimitiveType {
   kind: 'primitive';
   name: PrimitiveTypeKind;
+  guardedTypes?: Type[];
 }
 
 export interface ArrayType {
   kind: 'array';
   elementType: Type;
+  guardedTypes?: Type[];
 }
 
 export interface FunctionType {
   kind: 'function';
   paramTypes: Type[];
   returnType: Type;
+  guardedTypes?: Type[];
 }
 
 export interface TypeVar {
   kind: 'typevar';
   id: string;
   instance?: Type;
+  guardedTypes?: Type[];
 }
 
-export type Type = PrimitiveType | ArrayType | FunctionType | TypeVar;
+export interface UnionType {
+  kind: 'union';
+  types: Type[];
+  guardedTypes?: Type[];
+}
+
+export type Type = PrimitiveType | ArrayType | FunctionType | TypeVar | UnionType;
 
 export const NUMBER_TYPE: PrimitiveType = { kind: 'primitive', name: 'number' };
 export const STRING_TYPE: PrimitiveType = { kind: 'primitive', name: 'string' };
 export const BOOLEAN_TYPE: PrimitiveType = { kind: 'primitive', name: 'boolean' };
 export const VOID_TYPE: PrimitiveType = { kind: 'primitive', name: 'void' };
+export const NULL_TYPE: PrimitiveType = { kind: 'primitive', name: 'null' };
 
 let typeVarCounter = 0;
 
@@ -58,26 +69,73 @@ export function createFunctionType(paramTypes: Type[], returnType: Type): Functi
   };
 }
 
+export function createUnionType(members: Type[]): Type {
+  const flattened: Type[] = [];
+  for (const m of members) {
+    const p = prune(m);
+    if (p.kind === 'union') {
+      flattened.push(...p.types);
+    } else {
+      flattened.push(p);
+    }
+  }
+
+  // Deduplicate
+  const unique: Type[] = [];
+  for (const candidate of flattened) {
+    if (!unique.some((u) => typesAreEqual(u, candidate))) {
+      unique.push(candidate);
+    }
+  }
+
+  if (unique.length === 0) {
+    return VOID_TYPE;
+  }
+  const allGuarded = members.flatMap((m) => m.guardedTypes ?? []);
+  const result: Type =
+    unique.length === 1
+      ? unique[0]!
+      : {
+          kind: 'union',
+          types: unique,
+        };
+  if (allGuarded.length > 0) {
+    result.guardedTypes = allGuarded;
+  }
+  return result;
+}
+
+export function unionSubtract(source: Type, toRemove: Type): Type {
+  const pSource = prune(source);
+  const pRemove = prune(toRemove);
+
+  if (pSource.kind !== 'union') {
+    if (typesAreEqual(pSource, pRemove)) {
+      return VOID_TYPE;
+    }
+    return pSource;
+  }
+
+  const remaining = pSource.types.filter((t) => !typesAreEqual(t, pRemove));
+  return createUnionType(remaining);
+}
+
+export function unionIncludes(union: Type, target: Type): boolean {
+  const pUnion = prune(union);
+  const pTarget = prune(target);
+
+  if (pUnion.kind === 'union') {
+    return pUnion.types.some((t) => typesAreEqual(t, pTarget));
+  }
+  return typesAreEqual(pUnion, pTarget);
+}
+
 export function prune(type: Type): Type {
   if (type.kind === 'typevar') {
     if (type.instance) {
       type.instance = prune(type.instance);
       return type.instance;
     }
-    return type;
-  }
-  if (type.kind === 'array') {
-    return {
-      kind: 'array',
-      elementType: prune(type.elementType),
-    };
-  }
-  if (type.kind === 'function') {
-    return {
-      kind: 'function',
-      paramTypes: type.paramTypes.map(prune),
-      returnType: prune(type.returnType),
-    };
   }
   return type;
 }
@@ -95,6 +153,8 @@ export function typeToString(type: Type): string {
     }
     case 'typevar':
       return pruned.instance ? typeToString(pruned.instance) : pruned.id;
+    case 'union':
+      return pruned.types.map(typeToString).join(' | ');
   }
 }
 
@@ -134,6 +194,13 @@ export function typesAreEqual(t1: Type, t2: Type): boolean {
       }
     }
     return typesAreEqual(p1.returnType, p2.returnType);
+  }
+
+  if (p1.kind === 'union' && p2.kind === 'union') {
+    if (p1.types.length !== p2.types.length) {
+      return false;
+    }
+    return p1.types.every((tA) => p2.types.some((tB) => typesAreEqual(tA, tB)));
   }
 
   return false;

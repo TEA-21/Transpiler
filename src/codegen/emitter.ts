@@ -23,13 +23,19 @@ export function toCamelCase(name: string): string {
   return name.replace(/_([a-zA-Z0-9])/g, (_, char: string) => char.toUpperCase());
 }
 
+export interface EmitterOptions {
+  moduleMode?: boolean;
+}
+
 export class TypeScriptEmitter {
   private indentLevel = 0;
   private scopeStack: Set<string>[] = [new Set()];
+  private isModule = false;
 
-  public emit(program: Program): string {
+  public emit(program: Program, options?: EmitterOptions): string {
     this.indentLevel = 0;
     this.scopeStack = [new Set()];
+    this.isModule = Boolean(options?.moduleMode);
     const lines: string[] = [];
 
     for (let i = 0; i < program.body.length; i++) {
@@ -106,11 +112,16 @@ export class TypeScriptEmitter {
     // Initial declaration
     this.declareVariable(rawName);
     const typeSig = stmt.inferredType ? `: ${stmt.inferredType}` : '';
-    return `${this.indent()}let ${camelName}${typeSig} = ${initCode};`;
+    const keyword = stmt.isConst ? 'const' : 'let';
+    const isTopLevel = this.scopeStack.length === 1;
+    const exportPrefix = this.isModule && isTopLevel && stmt.isConst ? 'export ' : '';
+    return `${this.indent()}${exportPrefix}${keyword} ${camelName}${typeSig} = ${initCode};`;
   }
 
   private emitFunctionDeclaration(stmt: FunctionDeclaration): string {
     const fnName = toCamelCase(stmt.id.name);
+    const isTopLevel = this.scopeStack.length === 1;
+    const exportPrefix = this.isModule && isTopLevel ? 'export ' : '';
     this.declareVariable(stmt.id.name);
 
     this.enterScope();
@@ -122,7 +133,7 @@ export class TypeScriptEmitter {
     });
 
     const retType = stmt.inferredReturnType ?? 'void';
-    const header = `${this.indent()}function ${fnName}(${typedParams.join(', ')}): ${retType} {`;
+    const header = `${this.indent()}${exportPrefix}function ${fnName}(${typedParams.join(', ')}): ${retType} {`;
 
     this.indentLevel++;
     const bodyLines = stmt.body.body.map((s) => this.emitStatement(s));
@@ -207,6 +218,8 @@ export class TypeScriptEmitter {
         return JSON.stringify(expr.value);
       case 'BooleanLiteral':
         return expr.value ? 'true' : 'false';
+      case 'NoneLiteral':
+        return 'null';
       case 'Identifier':
         return toCamelCase(expr.name);
       case 'ArrayLiteral':
@@ -237,6 +250,8 @@ export class TypeScriptEmitter {
     else if (expr.operator === 'or') op = '||';
     else if (expr.operator === '==') op = '===';
     else if (expr.operator === '!=') op = '!==';
+    else if (expr.operator === 'is') op = '===';
+    else if (expr.operator === 'is not') op = '!==';
 
     return `${left} ${op} ${right}`;
   }
@@ -247,13 +262,24 @@ export class TypeScriptEmitter {
       return `console.log(${args})`;
     }
 
+    if (expr.callee.type === 'Identifier' && expr.callee.name === 'isinstance') {
+      const target = this.emitExpression(expr.arguments[0]!);
+      const typeArg = expr.arguments[1];
+      const typeName = typeArg && typeArg.type === 'Identifier' ? typeArg.name : '';
+      let tsType = 'object';
+      if (typeName === 'int') tsType = 'number';
+      else if (typeName === 'str') tsType = 'string';
+      else if (typeName === 'bool') tsType = 'boolean';
+      return `typeof ${target} === "${tsType}"`;
+    }
+
     const calleeCode = this.emitExpression(expr.callee);
     const args = expr.arguments.map((a) => this.emitExpression(a)).join(', ');
     return `${calleeCode}(${args})`;
   }
 }
 
-export function emitTypeScript(program: Program): string {
+export function emitTypeScript(program: Program, options?: EmitterOptions): string {
   const emitter = new TypeScriptEmitter();
-  return emitter.emit(program);
+  return emitter.emit(program, options);
 }

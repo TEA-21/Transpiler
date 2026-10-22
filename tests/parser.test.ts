@@ -286,4 +286,43 @@ describe('Base AST Parser', () => {
     expect(decl2.init.object.name).toBe('items');
     expect(decl2.init.index.value).toBe(0);
   });
+
+  it('parses None literal and is / is not binary comparisons', () => {
+    const input = [
+      'res = None',
+      'is_null = res is None',
+      'has_val = res is not None',
+    ].join('\n');
+
+    const ast = parseMiniPython(input);
+    expect(ast.body.length).toBe(3);
+
+    const decl1 = ast.body[0] as any;
+    expect(decl1.init.type).toBe('NoneLiteral');
+    expect(decl1.init.value).toBe(null);
+
+    const decl2 = ast.body[1] as any;
+    expect(decl2.init.type).toBe('BinaryExpression');
+    expect(decl2.init.operator).toBe('is');
+    expect(decl2.init.left.name).toBe('res');
+    expect(decl2.init.right.type).toBe('NoneLiteral');
+
+    const decl3 = ast.body[2] as any;
+    expect(decl3.init.type).toBe('BinaryExpression');
+    expect(decl3.init.operator).toBe('is not');
+    expect(decl3.init.left.name).toBe('res');
+    expect(decl3.init.right.type).toBe('NoneLiteral');
+  });
+
+  it('parses isinstance() call expressions', () => {
+    const input = 'check = isinstance(val, int)';
+    const ast = parseMiniPython(input);
+
+    const decl = ast.body[0] as any;
+    expect(decl.init.type).toBe('CallExpression');
+    expect(decl.init.callee.name).toBe('isinstance');
+    expect(decl.init.arguments.length).toBe(2);
+    expect(decl.init.arguments[0].name).toBe('val');
+    expect(decl.init.arguments[1].name).toBe('int');
+  });
 });

@@ -1,4 +1,5 @@
 import { SourceLocation } from '../errors/diagnostic.js';
+import { VariableDeclaration } from '../parser/ast.js';
 import { Type, typeToString } from './types.js';
 
 export type SymbolKind = 'variable' | 'function' | 'parameter';
@@ -7,8 +8,10 @@ export interface Symbol {
   name: string;
   kind: SymbolKind;
   type: Type;
+  currentType?: Type;
   loc: SourceLocation;
   isMutable: boolean;
+  declarationNode?: VariableDeclaration;
 }
 
 export type ScopeType = 'global' | 'function' | 'block' | 'loop';
@@ -35,6 +38,16 @@ export class Scope {
 
   public define(symbol: Symbol): void {
     this.symbols.set(symbol.name, symbol);
+  }
+
+  public narrow(name: string, narrowedType: Type): void {
+    const original = this.resolve(name);
+    if (original) {
+      this.symbols.set(name, {
+        ...original,
+        currentType: narrowedType,
+      });
+    }
   }
 
   public resolve(name: string): Symbol | undefined {

@@ -43,13 +43,31 @@ describe('Semantic Analysis & Type Inference', () => {
       expect(countSym?.isMutable).toBe(true);
     });
 
-    it('rejects conflicting reassignment with incompatible type', () => {
+    it('infers union type on reassignment and rejects unsafe un-narrowed operations', () => {
       const input = [
         'count = 10',
         'count = "Alice"',
       ].join('\n');
 
-      expect(() => analyzeMiniPython(input)).toThrowError(TypeError);
+      const { rootScope, program } = analyzeMiniPython(input);
+      const countSym = rootScope.resolve('count');
+      expect(countSym?.type).toEqual({
+        kind: 'union',
+        types: [
+          { kind: 'primitive', name: 'number' },
+          { kind: 'primitive', name: 'string' },
+        ],
+      });
+      const decl0 = program.body[0] as VariableDeclaration;
+      expect(decl0.inferredType).toBe('number | string');
+
+      // Unsafe un-narrowed operation must throw TypeError
+      const badInput = [
+        'count = 10',
+        'count = "Alice"',
+        'bad = count - 5',
+      ].join('\n');
+      expect(() => analyzeMiniPython(badInput)).toThrowError(TypeError);
     });
   });
 
@@ -195,16 +213,26 @@ describe('Semantic Analysis & Type Inference', () => {
       expect(rootScope.resolve('s')?.type).toEqual({ kind: 'primitive', name: 'number' });
     });
 
-    it('rejects functions with conflicting return branch types', () => {
+    it('infers union return type across multiple branches and rejects un-narrowed usage', () => {
       const input = [
-        'def broken(x):',
+        'def get_val(x):',
         '    if x > 0:',
         '        return 1',
         '    else:',
         '        return "negative"',
       ].join('\n');
 
-      expect(() => analyzeMiniPython(input)).toThrowError(TypeError);
+      const { program } = analyzeMiniPython(input);
+      const fnDecl = program.body[0] as FunctionDeclaration;
+      expect(fnDecl.inferredReturnType).toBe('number | string');
+
+      // Unsafe un-narrowed operation on returned union must throw TypeError
+      const badCall = [
+        input,
+        'val = get_val(5)',
+        'bad = val + 10',
+      ].join('\n');
+      expect(() => analyzeMiniPython(badCall)).toThrowError(TypeError);
     });
 
     it('rejects call sites with wrong number of arguments (arity mismatch)', () => {
@@ -302,6 +330,61 @@ describe('Semantic Analysis & Type Inference', () => {
 
       const { rootScope } = analyzeMiniPython(input);
       expect(rootScope.resolve('res')?.type).toEqual({ kind: 'primitive', name: 'number' });
+    });
+  });
+
+  describe('Flow-Sensitive Occurrence Typing & Type Guards', () => {
+    it('narrows union types in consequent and alternate branches using isinstance()', () => {
+      const input = [
+        'def process(val):',
+        '    if isinstance(val, int):',
+        '        return val + 100',
+        '    else:',
+        '        return val + " processed"',
+        '',
+        'n_res = process(5)',
+        's_res = process("hello")',
+      ].join('\n');
+
+      const { program } = analyzeMiniPython(input);
+      const fnDecl = program.body[0] as FunctionDeclaration;
+      expect(fnDecl.inferredReturnType).toBe('number | string');
+    });
+
+    it('narrows optional types using is not None checks', () => {
+      const input = [
+        'def find_item(flag):',
+        '    if flag:',
+        '        return 42',
+        '    return None',
+        '',
+        'item = find_item(True)',
+        'out = 0',
+        'if item is not None:',
+        '    out = item + 1',
+      ].join('\n');
+
+      const { rootScope, program } = analyzeMiniPython(input);
+      const fnDecl = program.body[0] as FunctionDeclaration;
+      expect(fnDecl.inferredReturnType).toBe('number | null');
+      const itemSym = rootScope.resolve('item');
+      expect(itemSym?.type).toEqual({
+        kind: 'union',
+        types: [
+          { kind: 'primitive', name: 'number' },
+          { kind: 'primitive', name: 'null' },
+        ],
+      });
+    });
+
+    it('rejects indexing into union type without type narrowing', () => {
+      const input = [
+        'items = [1, 2, 3]',
+        'items = 100',
+        'bad = items[0]',
+      ].join('\n');
+
+      expect(() => analyzeMiniPython(input)).toThrowError(TypeError);
     });
   });
 });

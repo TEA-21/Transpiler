@@ -14,6 +14,8 @@ export enum TokenType {
   KEYWORD_AND = 'KEYWORD_AND',
   KEYWORD_OR = 'KEYWORD_OR',
   KEYWORD_NOT = 'KEYWORD_NOT',
+  KEYWORD_NONE = 'KEYWORD_NONE',
+  KEYWORD_IS = 'KEYWORD_IS',
 
   // Identifiers & Literals
   IDENTIFIER = 'IDENTIFIER',
@@ -74,4 +76,6 @@ export const KEYWORDS: Record<string, TokenType> = {
   and: TokenType.KEYWORD_AND,
   or: TokenType.KEYWORD_OR,
   not: TokenType.KEYWORD_NOT,
+  None: TokenType.KEYWORD_NONE,
+  is: TokenType.KEYWORD_IS,
 };

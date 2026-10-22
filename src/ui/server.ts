@@ -32,7 +32,7 @@ function getMimeType(filePath: string): string {
   }
 }
 
-function handleTranspile(source: string): Record<string, unknown> {
+function handleTranspile(source: string, options?: { moduleMode?: boolean }): Record<string, unknown> {
   const start = performance.now();
   try {
     // Stage 1: Lexer
@@ -61,7 +61,7 @@ function handleTranspile(source: string): Record<string, unknown> {
     const scopeDump = rootScope.toDumpObject();
 
     // Stage 5: Emitter
-    const tsCode = emitTypeScript(decoratedAst);
+    const tsCode = emitTypeScript(decoratedAst, options);
     const elapsed = Number((performance.now() - start).toFixed(2));
 
     return {
@@ -118,7 +118,8 @@ const server = http.createServer((req, res) => {
       try {
         const payload = JSON.parse(body || '{}');
         const source = typeof payload.source === 'string' ? payload.source : '';
-        const result = handleTranspile(source);
+        const moduleMode = Boolean(payload.moduleMode);
+        const result = handleTranspile(source, { moduleMode });
         res.writeHead(200, {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
