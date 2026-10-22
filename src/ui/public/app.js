@@ -1225,13 +1225,6 @@ document.querySelectorAll('.btn-tool-toggle').forEach((btn) => {
     pane.querySelectorAll('.btn-tool-toggle').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
 
-    const diagramEl = pane.querySelector('.ast-diagram-viewport');
-    const treeEl = pane.querySelector('.ast-tree-view');
-    const jsonEl = pane.querySelector('.json-viewer');
-    const isDecorated = paneId.includes('decorated');
-    const diagramActionsEl = document.getElementById(isDecorated ? 'decorated-diagram-actions' : 'raw-diagram-actions');
-    const treeActionsEl = document.getElementById(isDecorated ? 'decorated-tree-actions' : 'raw-tree-actions');
-
     // Handle Tab 2: Symbol Table toggles
     if (paneId === 'tab-symbol-table') {
       const scopedEl = document.getElementById('symbol-table-scoped');
