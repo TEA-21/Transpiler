@@ -139,6 +139,28 @@ export interface IndexExpression extends BaseNode {
   index: Expression;
 }
 
+export interface SliceExpression extends BaseNode {
+  type: 'SliceExpression';
+  object: Expression;
+  start: Expression | null;
+  stop: Expression | null;
+  step: Expression | null;
+  inferredResultType?: string;
+}
+
+export interface ComprehensionClause {
+  target: Identifier;
+  iter: Expression;
+  ifs: Expression[];
+}
+
+export interface ListComprehension extends BaseNode {
+  type: 'ListComprehension';
+  element: Expression;
+  clauses: ComprehensionClause[];
+  inferredElementType?: string;
+}
+
 export interface CallExpression extends BaseNode {
   type: 'CallExpression';
   callee: Expression;
@@ -150,7 +172,9 @@ export type Expression =
   | UnaryExpression
   | CallExpression
   | IndexExpression
+  | SliceExpression
   | ArrayLiteral
+  | ListComprehension
   | Identifier
   | Literal;
 

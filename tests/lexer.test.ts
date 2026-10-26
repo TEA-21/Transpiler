@@ -252,4 +252,16 @@ describe('Lexer', () => {
     expect(types).toContain(TokenType.KEYWORD_IS);
     expect(types).toContain(TokenType.KEYWORD_NOT);
   });
+
+  it('scans for and in keywords for comprehensions correctly', () => {
+    const input = '[x for x in items]';
+    const lexer = new Lexer(input);
+    const tokens = lexer.tokenize();
+
+    const types = tokens.map((t) => t.type);
+    expect(types).toContain(TokenType.KEYWORD_FOR);
+    expect(types).toContain(TokenType.KEYWORD_IN);
+    expect(types).toContain(TokenType.LBRACKET);
+    expect(types).toContain(TokenType.RBRACKET);
+  });
 });

@@ -169,4 +169,45 @@ describe('TypeScript Emitter (Prototype Code Generator)', () => {
     expect(tsCode).toContain('export const apiLimit: number = 500;');
     expect(tsCode).toContain('export function calculateTax(amount: number): number {');
   });
+
+  it('translates slice syntax into native .slice() and step operations', () => {
+    const input = [
+      'items = [10, 20, 30, 40, 50]',
+      'sub1 = items[1:3]',
+      'sub2 = items[:2]',
+      'sub3 = items[3:]',
+      'rev = items[::-1]',
+    ].join('\n');
+
+    const { tsCode } = transpileMiniPython(input);
+    expect(tsCode).toContain('items.slice(1, 3);');
+    expect(tsCode).toContain('items.slice(0, 2);');
+    expect(tsCode).toContain('items.slice(3);');
+    expect(tsCode).toContain('items.slice().reverse();');
+  });
+
+  it('translates negative single indexing to .at()', () => {
+    const input = [
+      'items = [1, 2, 3]',
+      'last = items[-1]',
+    ].join('\n');
+
+    const { tsCode } = transpileMiniPython(input);
+    expect(tsCode).toContain('items.at(-1)!;');
+  });
+
+  it('translates single and nested list comprehensions into map, filter, and flatMap chains', () => {
+    const input = [
+      'nums = [1, 2, 3]',
+      'doubles = [x * 2 for x in nums]',
+      'evens = [x for x in nums if x > 0]',
+      'matrix = [[1, 2], [3, 4]]',
+      'flattened = [item for row in matrix for item in row]',
+    ].join('\n');
+
+    const { tsCode } = transpileMiniPython(input);
+    expect(tsCode).toContain('nums.map((x) => x * 2);');
+    expect(tsCode).toContain('nums.filter((x) => x > 0).map((x) => x);');
+    expect(tsCode).toContain('matrix.flatMap((row) => row.map((item) => item));');
+  });
 });

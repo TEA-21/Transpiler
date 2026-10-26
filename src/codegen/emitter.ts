@@ -5,6 +5,8 @@ import {
   Expression,
   FunctionDeclaration,
   IfStatement,
+  SliceExpression,
+  ListComprehension,
   Program,
   ReturnStatement,
   Statement,
@@ -224,8 +226,19 @@ export class TypeScriptEmitter {
         return toCamelCase(expr.name);
       case 'ArrayLiteral':
         return `[${expr.elements.map((e) => this.emitExpression(e)).join(', ')}]`;
-      case 'IndexExpression':
+      case 'IndexExpression': {
+        const isNegative =
+          (expr.index.type === 'UnaryExpression' && expr.index.operator === '-') ||
+          (expr.index.type === 'NumericLiteral' && expr.index.value < 0);
+        if (isNegative) {
+          return `${this.emitExpression(expr.object)}.at(${this.emitExpression(expr.index)})!`;
+        }
         return `${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}]`;
+      }
+      case 'SliceExpression':
+        return this.emitSliceExpression(expr);
+      case 'ListComprehension':
+        return this.emitListComprehension(expr);
       case 'UnaryExpression':
         return this.emitUnaryExpression(expr);
       case 'BinaryExpression':
@@ -233,6 +246,127 @@ export class TypeScriptEmitter {
       case 'CallExpression':
         return this.emitCallExpression(expr);
     }
+  }
+
+  private emitSliceExpression(expr: SliceExpression): string {
+    const obj = this.emitExpression(expr.object);
+
+    if (!expr.step) {
+      if (expr.start && expr.stop) {
+        return `${obj}.slice(${this.emitExpression(expr.start)}, ${this.emitExpression(expr.stop)})`;
+      } else if (expr.start) {
+        return `${obj}.slice(${this.emitExpression(expr.start)})`;
+      } else if (expr.stop) {
+        return `${obj}.slice(0, ${this.emitExpression(expr.stop)})`;
+      } else {
+        return `${obj}.slice()`;
+      }
+    }
+
+    const isStepMinusOne =
+      (expr.step.type === 'UnaryExpression' &&
+        expr.step.operator === '-' &&
+        expr.step.argument.type === 'NumericLiteral' &&
+        expr.step.argument.value === 1) ||
+      (expr.step.type === 'NumericLiteral' && expr.step.value === -1);
+
+    if (isStepMinusOne) {
+      if (expr.start && expr.stop) {
+        return `${obj}.slice(${this.emitExpression(expr.start)}, ${this.emitExpression(expr.stop)}).reverse()`;
+      } else if (expr.start) {
+        return `${obj}.slice(${this.emitExpression(expr.start)}).reverse()`;
+      } else if (expr.stop) {
+        return `${obj}.slice(0, ${this.emitExpression(expr.stop)}).reverse()`;
+      } else {
+        if (expr.inferredResultType === 'string') {
+          return `${obj}.split('').reverse().join('')`;
+        }
+        return `${obj}.slice().reverse()`;
+      }
+    }
+
+    const stepStr = this.emitExpression(expr.step);
+    let baseSlice: string;
+    if (expr.start && expr.stop) {
+      baseSlice = `${obj}.slice(${this.emitExpression(expr.start)}, ${this.emitExpression(expr.stop)})`;
+    } else if (expr.start) {
+      baseSlice = `${obj}.slice(${this.emitExpression(expr.start)})`;
+    } else if (expr.stop) {
+      baseSlice = `${obj}.slice(0, ${this.emitExpression(expr.stop)})`;
+    } else {
+      baseSlice = `${obj}.slice()`;
+    }
+
+    if (expr.inferredResultType === 'string') {
+      return `${baseSlice}.split('').filter((_, i) => i % (${stepStr}) === 0).join('')`;
+    }
+    return `${baseSlice}.filter((_, i) => i % (${stepStr}) === 0)`;
+  }
+
+  private emitListComprehension(expr: ListComprehension): string {
+    if (expr.clauses.length === 1) {
+      const clause = expr.clauses[0]!;
+      const targetName = toCamelCase(clause.target.name);
+      const iterStr = this.emitExpression(clause.iter);
+
+      if (clause.ifs.length === 0) {
+        return `${iterStr}.map((${targetName}) => ${this.emitExpression(expr.element)})`;
+      }
+
+      const filterPred = this.emitFilterPredicate(targetName, clause.ifs);
+      return `${iterStr}.filter(${filterPred}).map((${targetName}) => ${this.emitExpression(expr.element)})`;
+    }
+
+    let inner = '';
+    for (let i = expr.clauses.length - 1; i >= 0; i--) {
+      const clause = expr.clauses[i]!;
+      const targetName = toCamelCase(clause.target.name);
+      const iterStr = this.emitExpression(clause.iter);
+
+      if (i === expr.clauses.length - 1) {
+        if (clause.ifs.length === 0) {
+          inner = `${iterStr}.map((${targetName}) => ${this.emitExpression(expr.element)})`;
+        } else {
+          const filterPred = this.emitFilterPredicate(targetName, clause.ifs);
+          inner = `${iterStr}.filter(${filterPred}).map((${targetName}) => ${this.emitExpression(expr.element)})`;
+        }
+      } else {
+        if (clause.ifs.length === 0) {
+          inner = `${iterStr}.flatMap((${targetName}) => ${inner})`;
+        } else {
+          const filterPred = this.emitFilterPredicate(targetName, clause.ifs);
+          inner = `${iterStr}.filter(${filterPred}).flatMap((${targetName}) => ${inner})`;
+        }
+      }
+    }
+    return inner;
+  }
+
+  private emitFilterPredicate(targetName: string, ifs: Expression[]): string {
+    const filterConditions = ifs.map((cond) => this.emitExpression(cond)).join(' && ');
+
+    for (const cond of ifs) {
+      if (
+        cond.type === 'CallExpression' &&
+        cond.callee.type === 'Identifier' &&
+        cond.callee.name === 'isinstance' &&
+        cond.arguments.length === 2 &&
+        cond.arguments[0]?.type === 'Identifier' &&
+        toCamelCase(cond.arguments[0].name) === targetName &&
+        cond.arguments[1]?.type === 'Identifier'
+      ) {
+        const typeName = cond.arguments[1].name;
+        let tsType = '';
+        if (typeName === 'int') tsType = 'number';
+        else if (typeName === 'str') tsType = 'string';
+        else if (typeName === 'bool') tsType = 'boolean';
+        if (tsType) {
+          return `(${targetName}): ${targetName} is ${tsType} => ${filterConditions}`;
+        }
+      }
+    }
+
+    return `(${targetName}) => ${filterConditions}`;
   }
 
   private emitUnaryExpression(expr: UnaryExpression): string {

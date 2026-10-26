@@ -14,9 +14,10 @@ function verifyWithTsc(tsCode: string): void {
 
   try {
     fs.writeFileSync(tmpFile, tsCode, 'utf-8');
+    const tscBin = path.resolve(process.cwd(), 'node_modules', 'typescript', 'bin', 'tsc');
     execSync(
-      `npx tsc --noEmit --ignoreConfig --strict --skipLibCheck --target ES2022 --module ESNext --moduleDetection force "${tmpFile}"`,
-      { stdio: 'pipe' }
+      `node "${tscBin}" --noEmit --ignoreConfig --strict --skipLibCheck --target ES2022 --module ESNext --moduleDetection force "${tmpFile}"`,
+      { stdio: 'pipe', timeout: 15000 }
     );
   } catch (err: any) {
     const msg = err.stdout?.toString() || err.stderr?.toString() || err.message;
@@ -28,7 +29,7 @@ function verifyWithTsc(tsCode: string): void {
   }
 }
 
-describe('End-to-End Automated tsc Compiler Verification', () => {
+describe('End-to-End Automated tsc Compiler Verification', { timeout: 25000 }, () => {
   it('compiles the full Review 2 demonstration pipeline under strict tsc with 0 errors', () => {
     const input = [
       'base_limit = 100',
@@ -146,6 +147,47 @@ describe('End-to-End Automated tsc Compiler Verification', () => {
       'val_str = format_payload("SAMPLE_TOKEN")',
       'print(val_int)',
       'print(val_str)',
+    ].join('\n');
+
+    const { tsCode } = transpileMiniPython(input);
+    expect(() => verifyWithTsc(tsCode)).not.toThrow();
+  });
+
+  it('compiles list comprehensions and array slicing under strict tsc with 0 errors', () => {
+    const input = [
+      'nums = [10, 20, 30, 40, 50]',
+      'slice1 = nums[1:4]',
+      'slice2 = nums[:3]',
+      'slice3 = nums[2:]',
+      'rev = nums[::-1]',
+      'last = nums[-1]',
+      'doubled = [x * 2 for x in nums if x > 20]',
+      'print(slice1)',
+      'print(slice2)',
+      'print(slice3)',
+      'print(rev)',
+      'print(last)',
+      'print(doubled)',
+    ].join('\n');
+
+    const { tsCode } = transpileMiniPython(input);
+    expect(() => verifyWithTsc(tsCode)).not.toThrow();
+  });
+
+  it('compiles list comprehension with occurrence typing and nested flatMap loops under strict tsc with 0 errors', () => {
+    const input = [
+      'def process_item(item):',
+      '    if isinstance(item, int):',
+      '        return item * 10',
+      '    else:',
+      '        return item',
+      '',
+      'dataset = [process_item(1), process_item("token"), process_item(5)]',
+      'pure_numbers = [x * 3 for x in dataset if isinstance(x, int)]',
+      'matrix = [[1, 2], [3, 4]]',
+      'flat = [cell * 2 for row in matrix for cell in row]',
+      'print(pure_numbers)',
+      'print(flat)',
     ].join('\n');
 
     const { tsCode } = transpileMiniPython(input);

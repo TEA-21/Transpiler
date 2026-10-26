@@ -12,6 +12,8 @@ import {
   Identifier,
   IfStatement,
   IndexExpression,
+  SliceExpression,
+  ListComprehension,
   Program,
   ReturnStatement,
   Statement,
@@ -442,8 +444,12 @@ export class SemanticAnalyzer {
         return this.inferIdentifier(expr);
       case 'ArrayLiteral':
         return this.inferArrayLiteral(expr);
+      case 'ListComprehension':
+        return this.inferListComprehension(expr);
       case 'IndexExpression':
         return this.inferIndexExpression(expr);
+      case 'SliceExpression':
+        return this.inferSliceExpression(expr);
       case 'CallExpression':
         return this.inferCallExpression(expr);
       case 'UnaryExpression':
@@ -527,6 +533,140 @@ export class SemanticAnalyzer {
     );
   }
 
+  private inferSliceExpression(expr: SliceExpression): Type {
+    const objectType = prune(this.inferExpression(expr.object));
+
+    if (objectType.kind === 'union') {
+      throw new TypeError(
+        `Cannot slice union type '${typeToString(objectType)}'. Narrow the type using isinstance() first.`,
+        expr.object.loc.start
+      );
+    }
+
+    if (expr.start) {
+      const startType = prune(this.inferExpression(expr.start));
+      try {
+        unify(startType, NUMBER_TYPE);
+      } catch {
+        throw new TypeError(
+          `Slice start must be of type 'number', found '${typeToString(startType)}'`,
+          expr.start.loc.start
+        );
+      }
+    }
+
+    if (expr.stop) {
+      const stopType = prune(this.inferExpression(expr.stop));
+      try {
+        unify(stopType, NUMBER_TYPE);
+      } catch {
+        throw new TypeError(
+          `Slice stop must be of type 'number', found '${typeToString(stopType)}'`,
+          expr.stop.loc.start
+        );
+      }
+    }
+
+    if (expr.step) {
+      const stepType = prune(this.inferExpression(expr.step));
+      try {
+        unify(stepType, NUMBER_TYPE);
+      } catch {
+        throw new TypeError(
+          `Slice step must be of type 'number', found '${typeToString(stepType)}'`,
+          expr.step.loc.start
+        );
+      }
+    }
+
+    let resultType: Type;
+    if (objectType.kind === 'array') {
+      resultType = objectType;
+    } else if (objectType.kind === 'primitive' && objectType.name === 'string') {
+      resultType = STRING_TYPE;
+    } else if (objectType.kind === 'typevar') {
+      const elemVar = createTypeVar('Elem_');
+      const arrType = createArrayType(elemVar);
+      unify(objectType, arrType);
+      resultType = arrType;
+    } else {
+      throw new TypeError(
+        `Type '${typeToString(objectType)}' does not support slicing`,
+        expr.object.loc.start
+      );
+    }
+
+    expr.inferredResultType = typeToString(prune(resultType));
+    return resultType;
+  }
+
+  private inferListComprehension(expr: ListComprehension): Type {
+    const previousScope = this.currentScope;
+    const compScope = this.currentScope.createChildScope('comprehension', 'block');
+    this.currentScope = compScope;
+
+    try {
+      for (const clause of expr.clauses) {
+        const iterType = prune(this.inferExpression(clause.iter));
+
+        if (iterType.kind === 'union') {
+          throw new TypeError(
+            `Cannot iterate over un-narrowed union type '${typeToString(iterType)}'. Narrow the type first.`,
+            clause.iter.loc.start
+          );
+        }
+
+        let elemType: Type;
+        if (iterType.kind === 'array') {
+          elemType = iterType.elementType;
+        } else if (iterType.kind === 'primitive' && iterType.name === 'string') {
+          elemType = STRING_TYPE;
+        } else if (iterType.kind === 'typevar') {
+          const elemVar = createTypeVar('Elem_');
+          unify(iterType, createArrayType(elemVar));
+          elemType = elemVar;
+        } else {
+          throw new TypeError(
+            `Type '${typeToString(iterType)}' is not iterable in list comprehension`,
+            clause.iter.loc.start
+          );
+        }
+
+        compScope.define({
+          name: clause.target.name,
+          kind: 'variable',
+          type: elemType,
+          currentType: elemType,
+          loc: clause.target.loc,
+          isMutable: false,
+        });
+
+        for (const ifExpr of clause.ifs) {
+          const testType = this.inferExpression(ifExpr);
+          try {
+            unify(testType, BOOLEAN_TYPE);
+          } catch {
+            throw new TypeError(
+              `List comprehension filter condition must evaluate to 'boolean', found '${typeToString(testType)}'`,
+              ifExpr.loc.start
+            );
+          }
+
+          const guard = this.extractTypeGuard(ifExpr);
+          if (guard) {
+            compScope.narrow(guard.targetName, guard.narrowedConsequent);
+          }
+        }
+      }
+
+      const elementResultType = prune(this.inferExpression(expr.element));
+      expr.inferredElementType = typeToString(elementResultType);
+      return createArrayType(elementResultType);
+    } finally {
+      this.currentScope = previousScope;
+    }
+  }
+
   private inferCallExpression(expr: CallExpression): Type {
     // Special handling for built-in print
     if (expr.callee.type === 'Identifier' && expr.callee.name === 'print') {
@@ -582,7 +722,9 @@ export class SemanticAnalyzer {
         const pParam = prune(paramType);
         if (pParam.guardedTypes && pParam.guardedTypes.length > 0) {
           const widened = createUnionType([pParam, argType]);
-          widened.guardedTypes = pParam.guardedTypes;
+          if (widened.kind === 'union') {
+            widened.guardedTypes = pParam.guardedTypes;
+          }
           calleeType.paramTypes[i] = widened;
           if (typesAreEqual(calleeType.returnType, pParam)) {
             calleeType.returnType = widened;

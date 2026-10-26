@@ -1,7 +1,6 @@
 import { ParserError } from '../errors/diagnostic.js';
 import { Token, TokenType } from '../lexer/tokens.js';
 import {
-  ArrayLiteral,
   BinaryOperator,
   BlockStatement,
   BooleanLiteral,
@@ -12,6 +11,8 @@ import {
   Identifier,
   IfStatement,
   IndexExpression,
+  SliceExpression,
+  ComprehensionClause,
   NoneLiteral,
   NumericLiteral,
   Program,
@@ -440,27 +441,92 @@ export class Parser {
       };
       expr = idVal;
     } else if (this.match(TokenType.LBRACKET)) {
-      // Array Literal
+      // Array Literal or List Comprehension
       const startLoc = this.previous().loc.start;
-      const elements: Expression[] = [];
+      this.skipNewlines();
 
-      if (!this.check(TokenType.RBRACKET)) {
-        do {
-          this.skipNewlines();
-          if (this.check(TokenType.RBRACKET)) {
-            break;
+      if (this.match(TokenType.RBRACKET)) {
+        const rbracket = this.previous();
+        expr = {
+          type: 'ArrayLiteral',
+          elements: [],
+          loc: { start: startLoc, end: rbracket.loc.end },
+        };
+      } else {
+        const firstExpr = this.parseExpression();
+        this.skipNewlines();
+
+        if (this.match(TokenType.KEYWORD_FOR)) {
+          // List comprehension: [firstExpr for target in iter ...]
+          const clauses: ComprehensionClause[] = [];
+
+          let targetToken = this.consume(
+            TokenType.IDENTIFIER,
+            "Expected loop variable in list comprehension"
+          );
+          let target: Identifier = {
+            type: 'Identifier',
+            name: targetToken.value,
+            loc: targetToken.loc,
+          };
+          this.consume(TokenType.KEYWORD_IN, "Expected 'in' after loop variable in list comprehension");
+          let iter = this.parseExpression();
+          const ifs: Expression[] = [];
+          while (this.match(TokenType.KEYWORD_IF)) {
+            ifs.push(this.parseExpression());
           }
-          elements.push(this.parseExpression());
-        } while (this.match(TokenType.COMMA));
-      }
+          clauses.push({ target, iter, ifs });
 
-      const rbracket = this.consume(TokenType.RBRACKET, "Expected ']' to close array literal");
-      const arrVal: ArrayLiteral = {
-        type: 'ArrayLiteral',
-        elements,
-        loc: { start: startLoc, end: rbracket.loc.end },
-      };
-      expr = arrVal;
+          // Support nested for clauses
+          while (this.match(TokenType.KEYWORD_FOR)) {
+            const nestedTargetToken = this.consume(
+              TokenType.IDENTIFIER,
+              "Expected loop variable in nested comprehension"
+            );
+            const nestedTarget: Identifier = {
+              type: 'Identifier',
+              name: nestedTargetToken.value,
+              loc: nestedTargetToken.loc,
+            };
+            this.consume(TokenType.KEYWORD_IN, "Expected 'in' after loop variable in list comprehension");
+            const nestedIter = this.parseExpression();
+            const nestedIfs: Expression[] = [];
+            while (this.match(TokenType.KEYWORD_IF)) {
+              nestedIfs.push(this.parseExpression());
+            }
+            clauses.push({ target: nestedTarget, iter: nestedIter, ifs: nestedIfs });
+          }
+
+          this.skipNewlines();
+          const rbracket = this.consume(
+            TokenType.RBRACKET,
+            "Expected ']' to close list comprehension"
+          );
+          expr = {
+            type: 'ListComprehension',
+            element: firstExpr,
+            clauses,
+            loc: { start: startLoc, end: rbracket.loc.end },
+          };
+        } else {
+          // Regular Array Literal
+          const elements: Expression[] = [firstExpr];
+          while (this.match(TokenType.COMMA)) {
+            this.skipNewlines();
+            if (this.check(TokenType.RBRACKET)) {
+              break;
+            }
+            elements.push(this.parseExpression());
+          }
+          this.skipNewlines();
+          const rbracket = this.consume(TokenType.RBRACKET, "Expected ']' to close array literal");
+          expr = {
+            type: 'ArrayLiteral',
+            elements,
+            loc: { start: startLoc, end: rbracket.loc.end },
+          };
+        }
+      }
     } else if (this.match(TokenType.LPAREN)) {
       // Parenthesized Group
       const startLoc = this.previous().loc.start;
@@ -488,15 +554,66 @@ export class Parser {
       if (this.match(TokenType.LPAREN)) {
         expr = this.finishCallExpression(expr);
       } else if (this.match(TokenType.LBRACKET)) {
-        const index = this.parseExpression();
-        const rbracket = this.consume(TokenType.RBRACKET, "Expected ']' after index expression");
-        const idxExpr: IndexExpression = {
-          type: 'IndexExpression',
-          object: expr,
-          index,
-          loc: { start: expr.loc.start, end: rbracket.loc.end },
-        };
-        expr = idxExpr;
+        this.skipNewlines();
+        let start: Expression | null = null;
+        let stop: Expression | null = null;
+        let step: Expression | null = null;
+
+        if (this.match(TokenType.COLON)) {
+          // obj[:...]
+          if (!this.check(TokenType.RBRACKET) && !this.check(TokenType.COLON)) {
+            stop = this.parseExpression();
+          }
+          if (this.match(TokenType.COLON)) {
+            if (!this.check(TokenType.RBRACKET)) {
+              step = this.parseExpression();
+            }
+          }
+          const rbracket = this.consume(TokenType.RBRACKET, "Expected ']' after slice expression");
+          const sliceExpr: SliceExpression = {
+            type: 'SliceExpression',
+            object: expr,
+            start: null,
+            stop,
+            step,
+            loc: { start: expr.loc.start, end: rbracket.loc.end },
+          };
+          expr = sliceExpr;
+        } else {
+          const firstExpr = this.parseExpression();
+          if (this.match(TokenType.COLON)) {
+            // obj[start:...]
+            start = firstExpr;
+            if (!this.check(TokenType.RBRACKET) && !this.check(TokenType.COLON)) {
+              stop = this.parseExpression();
+            }
+            if (this.match(TokenType.COLON)) {
+              if (!this.check(TokenType.RBRACKET)) {
+                step = this.parseExpression();
+              }
+            }
+            const rbracket = this.consume(TokenType.RBRACKET, "Expected ']' after slice expression");
+            const sliceExpr: SliceExpression = {
+              type: 'SliceExpression',
+              object: expr,
+              start,
+              stop,
+              step,
+              loc: { start: expr.loc.start, end: rbracket.loc.end },
+            };
+            expr = sliceExpr;
+          } else {
+            // Regular index: obj[index]
+            const rbracket = this.consume(TokenType.RBRACKET, "Expected ']' after index expression");
+            const idxExpr: IndexExpression = {
+              type: 'IndexExpression',
+              object: expr,
+              index: firstExpr,
+              loc: { start: expr.loc.start, end: rbracket.loc.end },
+            };
+            expr = idxExpr;
+          }
+        }
       } else {
         break;
       }

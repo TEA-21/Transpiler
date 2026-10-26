@@ -325,4 +325,74 @@ describe('Base AST Parser', () => {
     expect(decl.init.arguments[0].name).toBe('val');
     expect(decl.init.arguments[1].name).toBe('int');
   });
+
+  it('parses slice expressions with various bound and step combinations', () => {
+    const input = [
+      'sub1 = items[1:4]',
+      'sub2 = items[:3]',
+      'sub3 = items[2:]',
+      'sub4 = items[::2]',
+      'sub5 = items[::-1]',
+    ].join('\n');
+
+    const ast = parseMiniPython(input);
+    expect(ast.body.length).toBe(5);
+
+    const d1 = (ast.body[0] as any).init;
+    expect(d1.type).toBe('SliceExpression');
+    expect(d1.start.value).toBe(1);
+    expect(d1.stop.value).toBe(4);
+    expect(d1.step).toBeNull();
+
+    const d2 = (ast.body[1] as any).init;
+    expect(d2.type).toBe('SliceExpression');
+    expect(d2.start).toBeNull();
+    expect(d2.stop.value).toBe(3);
+
+    const d3 = (ast.body[2] as any).init;
+    expect(d3.type).toBe('SliceExpression');
+    expect(d3.start.value).toBe(2);
+    expect(d3.stop).toBeNull();
+
+    const d4 = (ast.body[3] as any).init;
+    expect(d4.type).toBe('SliceExpression');
+    expect(d4.start).toBeNull();
+    expect(d4.stop).toBeNull();
+    expect(d4.step.value).toBe(2);
+
+    const d5 = (ast.body[4] as any).init;
+    expect(d5.type).toBe('SliceExpression');
+    expect(d5.start).toBeNull();
+    expect(d5.stop).toBeNull();
+    expect(d5.step.type).toBe('UnaryExpression');
+  });
+
+  it('parses single and nested list comprehensions with filters', () => {
+    const input = [
+      'doubles = [x * 2 for x in nums]',
+      'evens = [x for x in nums if x > 0]',
+      'flattened = [item for row in matrix for item in row if item != 0]',
+    ].join('\n');
+
+    const ast = parseMiniPython(input);
+    expect(ast.body.length).toBe(3);
+
+    const d1 = (ast.body[0] as any).init;
+    expect(d1.type).toBe('ListComprehension');
+    expect(d1.clauses.length).toBe(1);
+    expect(d1.clauses[0].target.name).toBe('x');
+    expect(d1.clauses[0].iter.name).toBe('nums');
+    expect(d1.clauses[0].ifs.length).toBe(0);
+
+    const d2 = (ast.body[1] as any).init;
+    expect(d2.type).toBe('ListComprehension');
+    expect(d2.clauses[0].ifs.length).toBe(1);
+
+    const d3 = (ast.body[2] as any).init;
+    expect(d3.type).toBe('ListComprehension');
+    expect(d3.clauses.length).toBe(2);
+    expect(d3.clauses[0].target.name).toBe('row');
+    expect(d3.clauses[1].target.name).toBe('item');
+    expect(d3.clauses[1].ifs.length).toBe(1);
+  });
 });

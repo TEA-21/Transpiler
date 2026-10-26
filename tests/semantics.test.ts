@@ -386,5 +386,72 @@ describe('Semantic Analysis & Type Inference', () => {
 
       expect(() => analyzeMiniPython(input)).toThrowError(TypeError);
     });
+
+    it('infers slice expression types for arrays and strings', () => {
+      const input = [
+        'nums = [1, 2, 3, 4, 5]',
+        'sub_nums = nums[1:3]',
+        'rev_nums = nums[::-1]',
+        'text = "hello world"',
+        'sub_text = text[:5]',
+      ].join('\n');
+
+      const { rootScope } = analyzeMiniPython(input);
+      expect(rootScope.resolve('sub_nums')?.type).toEqual({
+        kind: 'array',
+        elementType: { kind: 'primitive', name: 'number' },
+      });
+      expect(rootScope.resolve('rev_nums')?.type).toEqual({
+        kind: 'array',
+        elementType: { kind: 'primitive', name: 'number' },
+      });
+      expect(rootScope.resolve('sub_text')?.type).toEqual({
+        kind: 'primitive',
+        name: 'string',
+      });
+    });
+
+    it('rejects slicing on non-indexable types', () => {
+      const input = [
+        'x = 42',
+        'sub = x[1:2]',
+      ].join('\n');
+
+      expect(() => analyzeMiniPython(input)).toThrowError(TypeError);
+    });
+
+    it('infers list comprehension types with arithmetic mapping', () => {
+      const input = [
+        'nums = [1, 2, 3]',
+        'doubles = [x * 2 for x in nums]',
+      ].join('\n');
+
+      const { rootScope } = analyzeMiniPython(input);
+      expect(rootScope.resolve('doubles')?.type).toEqual({
+        kind: 'array',
+        elementType: { kind: 'primitive', name: 'number' },
+      });
+    });
+
+    it('narrows union types inside list comprehension filters via occurrence typing', () => {
+      const input = [
+        'def format_payload(item):',
+        '    if isinstance(item, int):',
+        '        return item * 10',
+        '    else:',
+        '        return item',
+        '',
+        'item1 = format_payload(42)',
+        'item2 = format_payload("SAMPLE_TOKEN")',
+        'items = [item1, item2]',
+        'only_ints = [x * 2 for x in items if isinstance(x, int)]',
+      ].join('\n');
+
+      const { rootScope } = analyzeMiniPython(input);
+      expect(rootScope.resolve('only_ints')?.type).toEqual({
+        kind: 'array',
+        elementType: { kind: 'primitive', name: 'number' },
+      });
+    });
   });
 });

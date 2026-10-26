@@ -99,7 +99,7 @@ export function createUnionType(members: Type[]): Type {
           kind: 'union',
           types: unique,
         };
-  if (allGuarded.length > 0) {
+  if (allGuarded.length > 0 && result.kind === 'union') {
     result.guardedTypes = allGuarded;
   }
   return result;
@@ -145,8 +145,14 @@ export function typeToString(type: Type): string {
   switch (pruned.kind) {
     case 'primitive':
       return pruned.name;
-    case 'array':
-      return `${typeToString(pruned.elementType)}[]`;
+    case 'array': {
+      const elem = prune(pruned.elementType);
+      const elemStr = typeToString(elem);
+      if (elem.kind === 'union' || elem.kind === 'function') {
+        return `(${elemStr})[]`;
+      }
+      return `${elemStr}[]`;
+    }
     case 'function': {
       const params = pruned.paramTypes.map(typeToString).join(', ');
       return `(${params}) => ${typeToString(pruned.returnType)}`;

@@ -22,8 +22,11 @@ export function unify(t1: Type, t2: Type): void {
       );
     }
     if (p1.guardedTypes && p1.guardedTypes.length > 0) {
-      p1.instance = createUnionType([...p1.guardedTypes, p2]);
-      p1.instance.guardedTypes = p1.guardedTypes;
+      const u = createUnionType([...p1.guardedTypes, p2]);
+      p1.instance = u.kind === 'union' ? u : { ...u, guardedTypes: p1.guardedTypes };
+      if (u.kind === 'union') {
+        u.guardedTypes = p1.guardedTypes;
+      }
     } else {
       p1.instance = p2;
     }
@@ -37,8 +40,11 @@ export function unify(t1: Type, t2: Type): void {
       );
     }
     if (p2.guardedTypes && p2.guardedTypes.length > 0) {
-      p2.instance = createUnionType([...p2.guardedTypes, p1]);
-      p2.instance.guardedTypes = p2.guardedTypes;
+      const u = createUnionType([...p2.guardedTypes, p1]);
+      p2.instance = u.kind === 'union' ? u : { ...u, guardedTypes: p2.guardedTypes };
+      if (u.kind === 'union') {
+        u.guardedTypes = p2.guardedTypes;
+      }
     } else {
       p2.instance = p1;
     }

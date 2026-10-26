@@ -76,6 +76,31 @@ str_out = format_data("compiler_token")
 print(num_out)
 print(str_out)`,
 
+  comprehensions_slices: `# Flow-Sensitive List Comprehensions & Slice Operations (USP)
+# 1. Single loops with filters -> .filter().map()
+# 2. Flow-sensitive occurrence typing inside filters narrows (number | string)[] -> number[]
+# 3. Array slicing with start, stop, and step ([::-1])
+# 4. Negative single indexing -> .at(-1)
+
+raw_items = [10, 20, 30, 40, 50]
+sub_items = raw_items[1:4]
+reversed_items = raw_items[::-1]
+last_elem = raw_items[-1]
+
+def get_mixed(item):
+    if isinstance(item, int):
+        return item * 10
+    else:
+        return item
+
+dataset = [get_mixed(1), get_mixed("A"), get_mixed(3)]
+only_doubled_ints = [x * 2 for x in dataset if isinstance(x, int)]
+
+print(sub_items)
+print(reversed_items)
+print(last_elem)
+print(only_doubled_ints)`,
+
   optional_null: `# Nullable Types & None Checking (Optional Pattern)
 # Functions returning None or a value infer T | null with branch narrowing.
 
@@ -954,6 +979,7 @@ function astToDiagramNode(node, edgeLabel = '', isDecorated = false) {
       };
     }
 
+    case 'ArrayLiteral':
     case 'ArrayExpression': {
       const children = (node.elements || []).map((el, i) =>
         astToDiagramNode(el, `[${i}]`, isDecorated)
@@ -968,6 +994,7 @@ function astToDiagramNode(node, edgeLabel = '', isDecorated = false) {
       };
     }
 
+    case 'IndexExpression':
     case 'SubscriptExpression': {
       const children = [];
       if (node.object) {
@@ -980,6 +1007,56 @@ function astToDiagramNode(node, edgeLabel = '', isDecorated = false) {
         category: 'operation',
         title: 'subscript',
         subtitle: `index lookup${inferredType ? ' ' + inferredType : ''}`,
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'SliceExpression': {
+      const children = [];
+      if (node.object) {
+        children.push(astToDiagramNode(node.object, 'target', isDecorated));
+      }
+      if (node.start) {
+        children.push(astToDiagramNode(node.start, 'start', isDecorated));
+      }
+      if (node.stop) {
+        children.push(astToDiagramNode(node.stop, 'stop', isDecorated));
+      }
+      if (node.step) {
+        children.push(astToDiagramNode(node.step, 'step', isDecorated));
+      }
+      return {
+        category: 'operation',
+        title: 'slice',
+        subtitle: `slice${inferredType ? ' ' + inferredType : ''}`,
+        edgeLabel,
+        loc,
+        children,
+      };
+    }
+
+    case 'ListComprehension': {
+      const children = [];
+      if (node.element) {
+        children.push(astToDiagramNode(node.element, 'element', isDecorated));
+      }
+      if (node.clauses) {
+        node.clauses.forEach((c, idx) => {
+          if (c.target) children.push(astToDiagramNode(c.target, `var ${idx + 1}`, isDecorated));
+          if (c.iter) children.push(astToDiagramNode(c.iter, `in ${idx + 1}`, isDecorated));
+          if (c.ifs) {
+            c.ifs.forEach((cond, ci) => {
+              children.push(astToDiagramNode(cond, `if ${ci + 1}`, isDecorated));
+            });
+          }
+        });
+      }
+      return {
+        category: 'operation',
+        title: 'comprehension',
+        subtitle: `list comp${inferredType ? ' ' + inferredType : ''}`,
         edgeLabel,
         loc,
         children,
