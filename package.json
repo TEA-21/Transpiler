@@ -12,8 +12,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "cli": "npx tsx src/cli.ts",
-    "demo": "npx tsx src/demo.ts",
-    "demo:review2": "npx tsx src/demo_review2.ts",
     "ui": "npx tsx watch src/ui/server.ts"
   },
   "keywords": [
